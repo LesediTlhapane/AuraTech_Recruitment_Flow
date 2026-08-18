@@ -996,55 +996,56 @@ export function App() {
   // ============================================================
 
   const handleAddJob = async (
-    newJob: JobProfile
-  ) => {
-    setJobs((prev) => [newJob, ...prev]);
+  newJob: JobProfile
+) => {
+  setJobs((prev) => [newJob, ...prev]);
 
-    addAuditLog(
-      'Job Profile Created',
-      `Generated internal structured job profile for "${newJob.jobTitle}".`,
-      undefined,
-      'JOB_CREATED'
+  addAuditLog(
+    'Job Profile Created',
+    `Generated internal structured job profile for "${newJob.jobTitle}".`,
+    undefined,
+    'JOB_CREATED'
+  );
+
+  if (!isSupabaseConfigured) {
+    console.log(
+      'Supabase not configured. Job stored in local application state only.'
     );
+    return;
+  }
 
-    if (!isSupabaseConfigured) {
-      console.log(
-        'Supabase not configured. Job stored in local application state only.'
-      );
-      return;
+  try {
+    const { data, error } = await supabase
+      .from('vacancies')
+      .insert({
+        title: newJob.jobTitle,
+        job_title: newJob.jobTitle,
+        department: newJob.department,
+        company: newJob.company,
+        location: newJob.location,
+        employment_type: newJob.employmentType,
+        salary_min_zar: Number(newJob.salaryMinZar || 0),
+        salary_max_zar: Number(newJob.salaryMaxZar || 0),
+        required_skills: newJob.requiredSkills || [],
+        preferred_skills: newJob.preferredSkills || [],
+        minimum_experience_years: Number(
+          newJob.minimumExperienceYears || 0
+        ),
+        qualifications: newJob.qualifications || [],
+        job_description: newJob.jobDescription || '',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Failed to save job to Supabase:', error);
+    } else {
+      console.log('Job successfully saved to Supabase:', data);
     }
-
-    try {
-      const { data, error } = await supabase
-        .from('vacancies')
-        .insert({
-          job_title: newJob.jobTitle,
-          department: newJob.department,
-          company: newJob.company,
-          location: newJob.location,
-          employment_type: newJob.employmentType,
-          salary_min_zar: Number(newJob.salaryMinZar || 0),
-          salary_max_zar: Number(newJob.salaryMaxZar || 0),
-          required_skills: newJob.requiredSkills || [],
-          preferred_skills: newJob.preferredSkills || [],
-          minimum_experience_years: Number(
-            newJob.minimumExperienceYears || 0
-          ),
-          qualifications: newJob.qualifications || [],
-          job_description: newJob.jobDescription || '',
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Failed to save job to Supabase:', error);
-      } else {
-        console.log('Job successfully saved to Supabase:', data);
-      }
-    } catch (error) {
-      console.error('Supabase job save error:', error);
-    }
-  };
+  } catch (error) {
+    console.error('Supabase job save error:', error);
+  }
+};
 
   // ============================================================
   // ADD CANDIDATE
