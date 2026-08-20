@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { JobProfile, EmploymentType, LocationType } from '../types';
 import {
   Plus,
@@ -64,23 +64,23 @@ export const Vacancies: React.FC<VacanciesProps> = ({
   // Form State for Create Job
   const [formData, setFormData] = useState<Partial<JobProfile>>({
     jobTitle: '',
-    department: 'Technology & Engineering',
-    company: 'eStudy South Africa',
-    location: 'Pretoria',
-    locationType: 'Hybrid',
-    employmentType: 'Full Time',
-    salaryMinZar: 20000,
-    salaryMaxZar: 28000,
-    requiredSkills: ['React', 'TypeScript', 'JavaScript', 'Tailwind CSS'],
-    preferredSkills: ['Node.js', 'REST APIs', 'SQL'],
-    minimumExperienceYears: 2,
-    qualifications: ['BSc Computer Science / BTech IT or Diploma (NQF Level 7)'],
+    department: '',
+    company: '',
+    location: '',
+    locationType: undefined,
+    employmentType: undefined,
+    salaryMinZar: undefined,
+    salaryMaxZar: undefined,
+    requiredSkills: [],
+    preferredSkills: [],
+    minimumExperienceYears: undefined,
+    qualifications: [],
     jobDescription: '',
-    closingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    closingDate: '',
   });
 
-  const [skillsInput, setSkillsInput] = useState('React, TypeScript, JavaScript, Tailwind CSS');
-  const [preferredSkillsInput, setPreferredSkillsInput] = useState('Node.js, REST APIs, SQL');
+  const [skillsInput, setSkillsInput] = useState('');
+  const [preferredSkillsInput, setPreferredSkillsInput] = useState('');
 
   // Company suggestions in Create form
   const [companySuggestions, setCompanySuggestions] = useState<CompanySuggestionItem[]>([]);
@@ -88,9 +88,40 @@ export const Vacancies: React.FC<VacanciesProps> = ({
 
   // Live Annual Package for Create Form
   const createAnnualPackage = calculateAnnualPackage(
-    Number(formData.salaryMinZar || 20000),
-    Number(formData.salaryMaxZar || 28000)
+    Number(formData.salaryMinZar || 0),
+    Number(formData.salaryMaxZar || 0)
   );
+
+  const openCreateModal = () => {
+    setFormData({
+      jobTitle: '',
+      department: '',
+      company: '',
+      location: '',
+      locationType: undefined,
+      employmentType: undefined,
+      salaryMinZar: undefined,
+      salaryMaxZar: undefined,
+      requiredSkills: [],
+      preferredSkills: [],
+      minimumExperienceYears: undefined,
+      qualifications: [],
+      jobDescription: '',
+      closingDate: '',
+    });
+    setSkillsInput('');
+    setPreferredSkillsInput('');
+    setRawSpecText('');
+    setCompanySuggestions([]);
+    setSuggestedLocationHint(null);
+    setIsOpenAddModal(true);
+  };
+
+  useEffect(() => {
+    if (isOpenAddModal) {
+      openCreateModal();
+    }
+  }, [isOpenAddModal]);
 
   const filteredJobs = jobs.filter(
     (j) =>
@@ -169,13 +200,13 @@ export const Vacancies: React.FC<VacanciesProps> = ({
     const newJob: JobProfile = {
       id: `job-${Date.now()}`,
       jobTitle: formData.jobTitle.trim() || 'New Position',
-      department: formData.department?.trim() || 'General',
-      company: formData.company?.trim() || 'eStudy South Africa',
-      location: formData.location?.trim() || 'Pretoria',
-      locationType: (formData.locationType as LocationType) || 'Hybrid',
-      employmentType: (formData.employmentType as EmploymentType) || 'Full Time',
-      salaryMinZar: Number(formData.salaryMinZar) || 20000,
-      salaryMaxZar: Number(formData.salaryMaxZar) || 28000,
+      department: formData.department?.trim() || '',
+      company: formData.company?.trim() || '',
+      location: formData.location?.trim() || '',
+      locationType: formData.locationType as LocationType,
+      employmentType: formData.employmentType as EmploymentType,
+      salaryMinZar: Number(formData.salaryMinZar) || 0,
+      salaryMaxZar: Number(formData.salaryMaxZar) || 0,
       requiredSkills: skillsInput
         .split(',')
         .map((s) => s.trim())
@@ -184,12 +215,12 @@ export const Vacancies: React.FC<VacanciesProps> = ({
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean),
-      minimumExperienceYears: Number(formData.minimumExperienceYears) || 2,
+      minimumExperienceYears: Number(formData.minimumExperienceYears) || 0,
       qualifications: typeof formData.qualifications === 'string'
         ? [formData.qualifications]
-        : formData.qualifications || ['Relevant Degree or Diploma (NQF 7)'],
-      jobDescription: formData.jobDescription || `${formData.jobTitle} position at ${formData.company}.`,
-      closingDate: formData.closingDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        : formData.qualifications || [],
+      jobDescription: formData.jobDescription || '',
+      closingDate: formData.closingDate || '',
       createdDate: new Date().toISOString().split('T')[0],
       status: 'Open',
       applicantCount: 0,
@@ -242,7 +273,7 @@ export const Vacancies: React.FC<VacanciesProps> = ({
           </div>
           <button
             id="create-job-profile-btn"
-            onClick={() => setIsOpenAddModal(true)}
+            onClick={openCreateModal}
             className="bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-sm shadow-indigo-500/20 transition flex items-center space-x-1.5 active:scale-95 cursor-pointer"
           >
             <Plus className="w-4 h-4 text-white" />
@@ -472,7 +503,6 @@ export const Vacancies: React.FC<VacanciesProps> = ({
               </div>
 
               <textarea
-                placeholder="Type or paste unformatted text (e.g. 'Junior React Developer in Pretoria, 2 years experience, R20 000 per month, full time')..."
                 value={rawSpecText}
                 onChange={(e) => setRawSpecText(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:outline-none focus:border-cyan-500 h-18 placeholder:text-slate-400"
@@ -525,7 +555,6 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                     value={formData.department || ''}
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
-                    placeholder="e.g. Engineering & Software Development"
                   />
                 </div>
               </div>
@@ -542,7 +571,6 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                     value={formData.company || ''}
                     onChange={(e) => handleCompanyChange(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs font-semibold"
-                    placeholder="Type e.g. eStu for eStudy..."
                   />
 
                   {/* Company Suggestions dropdown */}
@@ -592,7 +620,6 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                       setSuggestedLocationHint(null);
                     }}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
-                    placeholder="e.g. Pretoria, Gauteng"
                   />
                 </div>
               </div>
@@ -662,7 +689,6 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                       value={formData.salaryMinZar || ''}
                       onChange={(e) => setFormData({ ...formData, salaryMinZar: Number(e.target.value) })}
                       className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-7 pr-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs font-semibold"
-                      placeholder="e.g. 8000"
                     />
                   </div>
                 </div>
@@ -681,7 +707,6 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                       value={formData.salaryMaxZar || ''}
                       onChange={(e) => setFormData({ ...formData, salaryMaxZar: Number(e.target.value) })}
                       className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-7 pr-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs font-semibold"
-                      placeholder="e.g. 12000"
                     />
                   </div>
                 </div>
@@ -694,7 +719,7 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                     type="number"
                     min={0}
                     max={25}
-                    value={formData.minimumExperienceYears ?? 2}
+                    value={formData.minimumExperienceYears ?? ''}
                     onChange={(e) => setFormData({ ...formData, minimumExperienceYears: Number(e.target.value) })}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
                   />
@@ -744,7 +769,6 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                     value={skillsInput}
                     onChange={(e) => setSkillsInput(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
-                    placeholder="e.g. React, TypeScript, JavaScript"
                   />
                 </div>
 
@@ -757,7 +781,6 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                     value={preferredSkillsInput}
                     onChange={(e) => setPreferredSkillsInput(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
-                    placeholder="e.g. Node.js, SQL, REST APIs"
                   />
                 </div>
               </div>
@@ -776,7 +799,6 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                   }
                   onChange={(e) => setFormData({ ...formData, qualifications: [e.target.value] })}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
-                  placeholder="e.g. BSc Computer Science / BTech IT (NQF Level 7)"
                 />
               </div>
 
@@ -790,7 +812,6 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                   value={formData.jobDescription || ''}
                   onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
-                  placeholder="Enter detailed job specifications, duties, and responsibilities..."
                 />
               </div>
 
