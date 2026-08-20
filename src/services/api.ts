@@ -14,6 +14,48 @@ export interface ScreenCandidateResponse {
   };
 }
 
+export interface ExtractedCvFormDetails {
+  name?: string;
+  surname?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  qualification?: string;
+  yearsExperience?: number;
+  skills?: string[];
+  skillsString?: string;
+  noticePeriod?: string;
+  expectedSalary?: string;
+  currentRole?: string;
+  currentCompany?: string;
+  rawTextSummary?: string;
+}
+
+export async function extractCvWithAi(params: {
+  rawCvText?: string;
+  fileBase64?: string;
+  mimeType?: string;
+  fileName?: string;
+}): Promise<ExtractedCvFormDetails> {
+  const res = await fetch('/api/gemini/extract-cv', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const errorMessage = err.details || err.error || `HTTP ${res.status}: Failed to extract details from CV`;
+    throw new Error(errorMessage);
+  }
+
+  const data = await res.json();
+  if (data.success && data.data) {
+    return data.data;
+  }
+  throw new Error('Invalid response structure received from CV extractor');
+}
+
 export async function screenCandidateWithAi(
   rawCvText: string,
   coverLetterText: string | undefined,

@@ -1,9 +1,12 @@
 import express from 'express';
 import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
+import mammoth from 'mammoth';
+import * as pdfParseModule from 'pdf-parse';
+const pdfParse: any = (pdfParseModule as any).default || pdfParseModule;
 
 const app = express();
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '25mb' }));
 
 const PORT = 3000;
 
@@ -25,6 +28,182 @@ function getGeminiClient() {
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// AI CV Auto-Extraction Endpoint
+app.post('/api/gemini/extract-cv', async (req, res) => {
+  try {
+    const { rawCvText, fileBase64, mimeType, fileName } = req.body;
+
+    if (!rawCvText && !fileBase64) {
+      return res.status(400).json({ error: 'Missing CV text or file content to extract.' });
+    }
+
+    let parsedDocumentText = rawCvText || '';
+    let fileBuffer: Buffer | null = null;
+
+    if (fileBase64) {
+      try {
+        const cleanBase64 = fileBase64.includes('base64,') ? fileBase64.split('base64,')[1] : fileBase64;
+        fileBuffer = Buffer.from(cleanBase64, 'base64');
+
+        const lowerFileName = (fileName || '').toLowerCase();
+        const effectiveMime = (mimeType || '').toLowerCase();
+
+        // 1. DOCX Parsing with mammoth
+        if (
+          lowerFileName.endsWith('.docx') ||
+          lowerFileName.endsWith('.doc') ||
+          effectiveMime.includes('word') ||
+          effectiveMime.includes('officedocument')
+        ) {
+          try {
+            const docxResult = await mammoth.extractRawText({ buffer: fileBuffer });
+            if (docxResult && docxResult.value && docxResult.value.trim().length > 0) {
+              parsedDocumentText = docxResult.value.trim();
+              console.log(`[CV Extractor] Successfully extracted ${parsedDocumentText.length} chars from DOCX: ${fileName}`);
+            }
+          } catch (docxErr) {
+            console.warn('[CV Extractor] Mammoth docx parse warning:', docxErr);
+          }
+        }
+
+        // 2. PDF Parsing with pdf-parse
+        if (
+          lowerFileName.endsWith('.pdf') ||
+          effectiveMime.includes('pdf')
+        ) {
+          try {
+            const pdfData = await (pdfParse as any)(fileBuffer);
+            if (pdfData && pdfData.text && pdfData.text.trim().length > 0) {
+              parsedDocumentText = pdfData.text.trim();
+              console.log(`[CV Extractor] Successfully extracted ${parsedDocumentText.length} chars from PDF: ${fileName}`);
+            }
+          } catch (pdfErr) {
+            console.warn('[CV Extractor] pdf-parse warning (will use multimodal PDF fallback):', pdfErr);
+          }
+        }
+
+        // 3. Plain text or RTF or markdown
+        if (
+          !parsedDocumentText &&
+          (lowerFileName.endsWith('.txt') ||
+            lowerFileName.endsWith('.rtf') ||
+            lowerFileName.endsWith('.md') ||
+            effectiveMime.includes('text'))
+        ) {
+          parsedDocumentText = fileBuffer.toString('utf-8');
+        }
+      } catch (bufErr) {
+        console.warn('[CV Extractor] Error processing file buffer:', bufErr);
+      }
+    }
+
+    const ai = getGeminiClient();
+
+    const systemInstruction = `You are a Senior Talent Acquisition & AI Extraction Specialist.
+Your task is to thoroughly analyze the provided CV / Resume document or text and extract clean, structured candidate details for recruitment profile auto-filling.
+
+CRITICAL EXTRACTION RULES:
+1. Extract the actual stated details with high accuracy.
+2. If a field cannot be determined, return an empty string "" or 0 for numeric fields. Do not guess or invent fake data.
+3. For names: Split full name into firstName/name and lastName/surname accurately.
+4. For skills: Extract a comprehensive list of technical tools, programming languages, methodologies, platforms, and industry domain skills.
+5. For experience: Extract the total years of professional experience as a number (e.g. 5, 7, 3.5). If not explicitly stated, calculate it from the work history duration.
+6. For qualifications: Extract the highest qualification/degree including institution and NQF level if applicable (e.g., "BSc Computer Science (University of Pretoria, NQF 7)").
+7. For notice period: Extract stated notice period (e.g., "30 Days", "Immediate", "60 Days", "Calendar Month"). Default to "30 Days" if standard.
+8. For expected/current salary: Extract salary if mentioned (e.g., "R950,000 / annum" or "R45,000 pm").
+9. For rawTextSummary: Provide a clean, structured plaintext summary of the candidate's CV.`;
+
+    const prompt = `Extract all candidate profile details from the attached CV (${fileName || 'Candidate Resume'}).
+Return a JSON object strictly matching this schema:
+{
+  "name": "First Name (e.g. Liezel or Thabo)",
+  "surname": "Last Name / Surname (e.g. van der Merwe or Nkosi)",
+  "email": "candidate@example.com",
+  "phone": "+27 82 123 4567",
+  "location": "City, Province/Country (e.g. Pretoria East, Gauteng)",
+  "qualification": "Highest qualification and institution (e.g. BTech Information Technology - TUT)",
+  "yearsExperience": 7,
+  "skills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5"],
+  "skillsString": "Comma-separated string of skills (e.g. Azure, Kubernetes, Docker, C#, .NET Core, Terraform)",
+  "noticePeriod": "Notice period (e.g. 30 Days or 60 Days or Immediate)",
+  "expectedSalary": "Expected salary string (e.g. R1,050,000 / annum)",
+  "currentRole": "Current or most recent job title",
+  "currentCompany": "Current or most recent company",
+  "rawTextSummary": "Clean plaintext representation of the full CV"
+}`;
+
+    const contents: any[] = [];
+
+    // If PDF or Image, and we have the clean base64, also pass as inlineData
+    if (fileBase64 && mimeType) {
+      const cleanBase64 = fileBase64.includes('base64,') ? fileBase64.split('base64,')[1] : fileBase64;
+      const lowerFileName = (fileName || '').toLowerCase();
+      
+      if (mimeType.includes('pdf') || lowerFileName.endsWith('.pdf')) {
+        contents.push({
+          inlineData: {
+            data: cleanBase64,
+            mimeType: 'application/pdf',
+          },
+        });
+      } else if (mimeType.startsWith('image/')) {
+        contents.push({
+          inlineData: {
+            data: cleanBase64,
+            mimeType,
+          },
+        });
+      }
+    }
+
+    if (parsedDocumentText && parsedDocumentText.trim().length > 0) {
+      contents.push({
+        text: `CV DOCUMENT TEXT CONTENT:\n${parsedDocumentText.trim()}`,
+      });
+    }
+
+    contents.push({
+      text: prompt,
+    });
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.7-flash',
+      contents,
+      config: {
+        systemInstruction,
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const responseText = response.text || '{}';
+    let extractedData: any = {};
+    try {
+      extractedData = JSON.parse(responseText);
+    } catch (parseErr) {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        extractedData = JSON.parse(jsonMatch[0]);
+      }
+    }
+
+    // Ensure rawTextSummary has readable text if empty
+    if (!extractedData.rawTextSummary && parsedDocumentText) {
+      extractedData.rawTextSummary = parsedDocumentText;
+    }
+
+    return res.json({
+      success: true,
+      data: extractedData,
+    });
+  } catch (error: any) {
+    console.error('Error in /api/gemini/extract-cv:', error);
+    return res.status(500).json({
+      error: 'Failed to extract CV details',
+      details: error.message || String(error),
+    });
+  }
 });
 
 // Step 3, 4, 5, 6, 7 AI Screening Endpoint

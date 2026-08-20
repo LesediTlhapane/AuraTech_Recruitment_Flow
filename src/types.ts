@@ -148,6 +148,11 @@ export interface ApplicationRecord {
     timestamp: string;
     ipAddress?: string;
   };
+  attachedCvFile?: {
+    fileName: string;
+    fileSize: string;
+    uploadedAt: string;
+  };
   n8nPayload?: {
     step3_extraction: N8nNodeOutput<ExtractedCandidateData>;
     step4_scoring: N8nNodeOutput<ScoreCategoryBreakdown>;
