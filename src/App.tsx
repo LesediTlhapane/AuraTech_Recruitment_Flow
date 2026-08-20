@@ -11,7 +11,10 @@ import {
   ApplicationStatus,
   NotificationItem,
   CandidateCategory,
+  LocationType,
+  EmploymentType,
 } from './types';
+import { normalizeMonthlySalary } from './utils/vacancyUtils';
 
 import {
   initialEmails,
@@ -338,101 +341,118 @@ export function App() {
 
         const mappedJobs: JobProfile[] =
           (vacanciesResult.data || []).map(
-            (vacancy: any) => ({
-              id: String(vacancy.id),
+            (vacancy: any) => {
+              const rawLocation = vacancy.location || 'South Africa';
+              const rawLocLower = String(rawLocation).toLowerCase();
+              const deducedLocationType: LocationType = vacancy.location_type || vacancy.locationType || (
+                rawLocLower.includes('remote') ? 'Remote' : rawLocLower.includes('hybrid') ? 'Hybrid' : 'On-Site'
+              );
+              const cleanLocation = rawLocation.replace(/\s*\((Remote|Hybrid|On-Site|Onsite)\)/gi, '').trim() || rawLocation;
 
-              jobTitle:
-                vacancy.job_title ||
-                vacancy.jobTitle ||
-                vacancy.title ||
-                'Untitled Position',
+              const rawStatus = String(vacancy.status || 'Open').toLowerCase();
+              const normalizedStatus = rawStatus.includes('pause') ? 'Paused' : 'Open';
 
-              department:
-                vacancy.department ||
-                'General',
+              return {
+                id: String(vacancy.id),
 
-              company:
-                vacancy.company ||
-                'Enterprise Client',
+                jobTitle:
+                  vacancy.job_title ||
+                  vacancy.title ||
+                  vacancy.jobTitle ||
+                  'Untitled Position',
 
-              location:
-                vacancy.location ||
-                'South Africa',
+                department:
+                  vacancy.department ||
+                  'Technology & Engineering',
 
-              employmentType:
-                vacancy.employment_type ||
-                vacancy.employmentType ||
-                'Full-time',
+                company:
+                  vacancy.company ||
+                  'eStudy South Africa',
 
-              salaryMinZar: Number(
-                vacancy.salary_min_zar ??
-                  vacancy.salaryMinZar ??
-                  vacancy.salary_min ??
-                  600000
-              ),
+                location: cleanLocation || 'Pretoria',
 
-              salaryMaxZar: Number(
-                vacancy.salary_max_zar ??
-                  vacancy.salaryMaxZar ??
-                  vacancy.salary_max ??
-                  950000
-              ),
+                locationType: deducedLocationType,
 
-              requiredSkills:
-                Array.isArray(vacancy.required_skills)
-                  ? vacancy.required_skills
-                  : Array.isArray(vacancy.requiredSkills)
-                  ? vacancy.requiredSkills
-                  : typeof vacancy.required_skills === 'string'
-                  ? vacancy.required_skills.split(',').map((s: string) => s.trim()).filter(Boolean)
-                  : ['TypeScript', 'React'],
+                employmentType: (
+                  vacancy.employment_type ||
+                  vacancy.employmentType ||
+                  'Full Time'
+                ) as EmploymentType,
 
-              preferredSkills:
-                Array.isArray(vacancy.preferred_skills)
-                  ? vacancy.preferred_skills
-                  : Array.isArray(vacancy.preferredSkills)
-                  ? vacancy.preferredSkills
-                  : typeof vacancy.preferred_skills === 'string'
-                  ? vacancy.preferred_skills.split(',').map((s: string) => s.trim()).filter(Boolean)
-                  : ['PostgreSQL'],
+                salaryMinZar: normalizeMonthlySalary(
+                  Number(
+                    vacancy.salary_min_zar ??
+                      vacancy.salaryMinZar ??
+                      vacancy.salary_min ??
+                      20000
+                  )
+                ),
 
-              minimumExperienceYears: Number(
-                vacancy.minimum_experience_years ??
-                  vacancy.minimumExperienceYears ??
-                  3
-              ),
+                salaryMaxZar: normalizeMonthlySalary(
+                  Number(
+                    vacancy.salary_max_zar ??
+                      vacancy.salaryMaxZar ??
+                      vacancy.salary_max ??
+                      28000
+                  )
+                ),
 
-              qualifications:
-                Array.isArray(vacancy.qualifications)
-                  ? vacancy.qualifications
-                  : typeof vacancy.qualifications === 'string'
-                  ? [vacancy.qualifications]
-                  : ["Bachelor's Degree in Computer Science or related"],
+                requiredSkills:
+                  Array.isArray(vacancy.required_skills)
+                    ? vacancy.required_skills
+                    : Array.isArray(vacancy.requiredSkills)
+                    ? vacancy.requiredSkills
+                    : typeof vacancy.required_skills === 'string'
+                    ? vacancy.required_skills.split(',').map((s: string) => s.trim()).filter(Boolean)
+                    : ['TypeScript', 'React'],
 
-              jobDescription:
-                vacancy.job_description ||
-                vacancy.jobDescription ||
-                '',
+                preferredSkills:
+                  Array.isArray(vacancy.preferred_skills)
+                    ? vacancy.preferred_skills
+                    : Array.isArray(vacancy.preferredSkills)
+                    ? vacancy.preferredSkills
+                    : typeof vacancy.preferred_skills === 'string'
+                    ? vacancy.preferred_skills.split(',').map((s: string) => s.trim()).filter(Boolean)
+                    : ['PostgreSQL'],
 
-              closingDate:
-                vacancy.closing_date ||
-                vacancy.closingDate ||
-                '',
+                minimumExperienceYears: Number(
+                  vacancy.minimum_experience_years ??
+                    vacancy.minimumExperienceYears ??
+                    2
+                ),
 
-              createdDate:
-                vacancy.created_at ||
-                vacancy.createdDate ||
-                new Date().toISOString(),
+                qualifications:
+                  Array.isArray(vacancy.qualifications)
+                    ? vacancy.qualifications
+                    : typeof vacancy.qualifications === 'string'
+                    ? [vacancy.qualifications]
+                    : ["Bachelor's Degree in Computer Science or related (NQF 7)"],
 
-              status:
-                vacancy.status || 'Open',
+                jobDescription:
+                  vacancy.job_description ||
+                  vacancy.description ||
+                  vacancy.jobDescription ||
+                  '',
 
-              applicantCount: Number(
-                vacancy.applicant_count ??
-                  vacancy.applicantCount ??
-                  0
-              ),
-            })
+                closingDate:
+                  vacancy.closing_date ||
+                  vacancy.closingDate ||
+                  '2026-09-30',
+
+                createdDate:
+                  vacancy.created_at ||
+                  vacancy.createdDate ||
+                  new Date().toISOString(),
+
+                status: normalizedStatus,
+
+                applicantCount: Number(
+                  vacancy.applicant_count ??
+                    vacancy.applicantCount ??
+                    0
+                ),
+              };
+            }
           );
 
         setJobs(mappedJobs);
@@ -996,117 +1016,226 @@ export function App() {
   // ============================================================
 
   const handleAddJob = async (
-  newJob: JobProfile
-) => {
-  setJobs((prev) => [newJob, ...prev]);
-
-  addAuditLog(
-    'Job Profile Created',
-    `Generated internal structured job profile for "${newJob.jobTitle}".`,
-    undefined,
-    'JOB_CREATED'
-  );
-
-  if (!isSupabaseConfigured) {
-    console.log(
-      'Supabase not configured. Job stored in local application state only.'
-    );
-    return;
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from('vacancies')
-      .insert({
-        title: newJob.jobTitle,
-        job_title: newJob.jobTitle,
-        department: newJob.department,
-        company: newJob.company,
-        location: newJob.location,
-        employment_type: newJob.employmentType,
-        salary_min_zar: Number(newJob.salaryMinZar || 0),
-        salary_max_zar: Number(newJob.salaryMaxZar || 0),
-        required_skills: newJob.requiredSkills || [],
-        preferred_skills: newJob.preferredSkills || [],
-        minimum_experience_years: Number(
-          newJob.minimumExperienceYears || 0
-        ),
-        qualifications: newJob.qualifications || [],
-        job_description: newJob.jobDescription || '',
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Failed to save job to Supabase:', error);
-    } else {
-      console.log('Job successfully saved to Supabase:', data);
-      if (data?.id) {
-        setJobs((prev) =>
-          prev.map((job) =>
-            job.id === newJob.id
-              ? { ...job, id: String(data.id) }
-              : job
-          )
-        );
-      }
-    }
-  } catch (error) {
-    console.error('Supabase job save error:', error);
-  }
-};
-
-  const handleUpdateJob = async (updatedJob: JobProfile) => {
-    setJobs((prev) =>
-      prev.map((job) => (job.id === updatedJob.id ? updatedJob : job))
-    );
+    newJob: JobProfile
+  ) => {
+    setJobs((prev) => [newJob, ...prev]);
 
     addAuditLog(
-      'Job Profile Updated',
-      `Updated internal structured job profile for "${updatedJob.jobTitle}".`,
+      'Job Profile Created',
+      `Generated internal structured job profile for "${newJob.jobTitle}".`,
       undefined,
-      'JOB_UPDATED'
+      'JOB_CREATED'
     );
 
     if (!isSupabaseConfigured) {
       console.log(
-        'Supabase not configured. Job update stored in local application state only.'
+        'Supabase not configured. Job stored in local application state only.'
       );
       return;
     }
 
-    const vacancyUuid = nullableUuid(updatedJob.id);
-    if (!vacancyUuid) {
-      console.warn('Cannot update vacancy without a valid Supabase UUID:', updatedJob.id);
-      return;
+    try {
+      const locationToSave =
+        newJob.locationType &&
+        !newJob.location
+          .toLowerCase()
+          .includes(newJob.locationType.toLowerCase())
+          ? `${newJob.location} (${newJob.locationType})`
+          : newJob.location;
+
+      const { data, error } = await supabase
+        .from('vacancies')
+        .insert({
+          title: newJob.jobTitle,
+          job_title: newJob.jobTitle,
+          description: newJob.jobDescription || '',
+          job_description: newJob.jobDescription || '',
+          department: newJob.department,
+          company: newJob.company,
+          location: locationToSave,
+          employment_type: newJob.employmentType || 'Full Time',
+          salary_min_zar: Number(newJob.salaryMinZar || 0),
+          salary_max_zar: Number(newJob.salaryMaxZar || 0),
+          required_skills: newJob.requiredSkills || [],
+          preferred_skills: newJob.preferredSkills || [],
+          minimum_experience_years: Number(
+            newJob.minimumExperienceYears || 0
+          ),
+          qualifications: newJob.qualifications || [],
+          closing_date: newJob.closingDate || null,
+          status: (newJob.status || 'open').toLowerCase(),
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Failed to save job to Supabase:', error);
+      } else {
+        console.log('Job successfully saved to Supabase:', data);
+        if (data?.id) {
+          const supabaseId = String(data.id);
+          setJobs((prev) =>
+            prev.map((j) => (j.id === newJob.id ? { ...j, id: supabaseId } : j))
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Supabase job save error:', error);
     }
+  };
+
+  // ============================================================
+  // UPDATE JOB
+  // ============================================================
+
+  const handleUpdateJob = async (
+    updatedJob: JobProfile
+  ) => {
+    setJobs((prev) =>
+      prev.map((j) => (j.id === updatedJob.id ? updatedJob : j))
+    );
+
+    addAuditLog(
+      'Job Profile Updated',
+      `Updated parameters, requirements, and salary brackets for "${updatedJob.jobTitle}".`,
+      undefined,
+      'JOB_UPDATED'
+    );
+
+    if (!isSupabaseConfigured) return;
 
     try {
+      const vacancyUuid = nullableUuid(updatedJob.id);
+      if (!vacancyUuid) {
+        console.log('Job ID is not a database UUID; updated local state.');
+        return;
+      }
+
+      const locationToSave =
+        updatedJob.locationType &&
+        !updatedJob.location
+          .toLowerCase()
+          .includes(updatedJob.locationType.toLowerCase())
+          ? `${updatedJob.location} (${updatedJob.locationType})`
+          : updatedJob.location;
+
       const { error } = await supabase
         .from('vacancies')
         .update({
           title: updatedJob.jobTitle,
           job_title: updatedJob.jobTitle,
+          description: updatedJob.jobDescription || '',
+          job_description: updatedJob.jobDescription || '',
           department: updatedJob.department,
           company: updatedJob.company,
-          location: updatedJob.location,
-          employment_type: updatedJob.employmentType,
+          location: locationToSave,
+          employment_type: updatedJob.employmentType || 'Full Time',
           salary_min_zar: Number(updatedJob.salaryMinZar || 0),
           salary_max_zar: Number(updatedJob.salaryMaxZar || 0),
           required_skills: updatedJob.requiredSkills || [],
           preferred_skills: updatedJob.preferredSkills || [],
-          minimum_experience_years: Number(updatedJob.minimumExperienceYears || 0),
+          minimum_experience_years: Number(
+            updatedJob.minimumExperienceYears || 0
+          ),
           qualifications: updatedJob.qualifications || [],
-          job_description: updatedJob.jobDescription || '',
           closing_date: updatedJob.closingDate || null,
+          status: (updatedJob.status || 'open').toLowerCase(),
         })
         .eq('id', vacancyUuid);
 
       if (error) {
         console.error('Failed to update job in Supabase:', error);
+      } else {
+        console.log('Job successfully updated in Supabase:', updatedJob.id);
       }
     } catch (error) {
       console.error('Supabase job update error:', error);
+    }
+  };
+
+  // ============================================================
+  // DELETE JOB
+  // ============================================================
+
+  const handleDeleteJob = async (
+    jobId: string
+  ) => {
+    const targetJob = jobs.find((j) => j.id === jobId);
+    setJobs((prev) => prev.filter((j) => j.id !== jobId));
+
+    addAuditLog(
+      'Job Profile Deleted',
+      `Removed vacancy profile "${targetJob?.jobTitle || jobId}" from active database.`,
+      undefined,
+      'JOB_DELETED'
+    );
+
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const vacancyUuid = nullableUuid(jobId);
+      if (!vacancyUuid) {
+        console.log('Job ID is not a database UUID; deleted from local state.');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('vacancies')
+        .delete()
+        .eq('id', vacancyUuid);
+
+      if (error) {
+        console.error('Failed to delete job from Supabase:', error);
+      } else {
+        console.log('Job successfully deleted from Supabase:', jobId);
+      }
+    } catch (error) {
+      console.error('Supabase job delete error:', error);
+    }
+  };
+
+  // ============================================================
+  // TOGGLE PAUSE JOB
+  // ============================================================
+
+  const handleTogglePauseJob = async (
+    jobId: string
+  ) => {
+    let newStatus: 'Open' | 'Paused' = 'Paused';
+    setJobs((prev) =>
+      prev.map((j) => {
+        if (j.id === jobId) {
+          newStatus = j.status === 'Paused' ? 'Open' : 'Paused';
+          return { ...j, status: newStatus };
+        }
+        return j;
+      })
+    );
+
+    const targetJob = jobs.find((j) => j.id === jobId);
+    addAuditLog(
+      newStatus === 'Paused' ? 'Job Profile Paused' : 'Job Profile Resumed',
+      `Changed vacancy status for "${targetJob?.jobTitle || jobId}" to ${newStatus}.`,
+      undefined,
+      'JOB_STATUS_CHANGE'
+    );
+
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const vacancyUuid = nullableUuid(jobId);
+      if (!vacancyUuid) return;
+
+      const { error } = await supabase
+        .from('vacancies')
+        .update({ status: newStatus.toLowerCase() })
+        .eq('id', vacancyUuid);
+
+      if (error) {
+        console.error('Failed to toggle pause status in Supabase:', error);
+      }
+    } catch (error) {
+      console.error('Supabase toggle pause error:', error);
     }
   };
 
@@ -1752,20 +1881,26 @@ export function App() {
         {/* DASHBOARD */}
 
         {activeTab === 'dashboard' && (
-<Dashboard
-  candidates={candidates}
-  jobs={jobs}
-  onSelectCandidate={(cand) =>
-    setSelectedCandidateModal(cand)
-  }
-  onNavigateTab={(tab) =>
-    setActiveTab(tab)
-  }
-  onOpenAddCandidate={() =>
-    setIsOpenAddCandidateModal(true)
-  }
-  isAnonymizedView={isAnonymizedView}
-/>
+          <Dashboard
+            candidates={candidates}
+            jobs={jobs}
+            onSelectCandidate={(cand) =>
+              setSelectedCandidateModal(cand)
+            }
+            onNavigateTab={(tab) =>
+              setActiveTab(tab)
+            }
+            onOpenAddCandidate={() =>
+              setIsOpenAddCandidateModal(true)
+            }
+            onOpenAddJob={() =>
+              setIsOpenAddJobModal(true)
+            }
+            onUpdateJob={handleUpdateJob}
+            onDeleteJob={handleDeleteJob}
+            onTogglePauseJob={handleTogglePauseJob}
+            isAnonymizedView={isAnonymizedView}
+          />
         )}
 
         {/* VACANCIES */}
@@ -1775,6 +1910,11 @@ export function App() {
             jobs={jobs}
             onAddJob={handleAddJob}
             onUpdateJob={handleUpdateJob}
+            onDeleteJob={handleDeleteJob}
+            onTogglePauseJob={handleTogglePauseJob}
+            onNavigateToWorkbench={(jobId) => {
+              setActiveTab('workbench');
+            }}
             isOpenAddModal={
               isOpenAddJobModal
             }

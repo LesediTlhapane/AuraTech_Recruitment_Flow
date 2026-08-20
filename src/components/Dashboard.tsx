@@ -21,8 +21,18 @@ import {
   Sparkles,
   MapPin,
   Building2,
-  DollarSign
+  DollarSign,
+  Eye,
+  PauseCircle,
+  PlayCircle
 } from 'lucide-react';
+import {
+  formatMonthlySalaryRange,
+  calculateAnnualPackage,
+  getClosingDateIndicator,
+  formatLocationDisplay,
+} from '../utils/vacancyUtils';
+import { VacancyDetailModal } from './VacancyDetailModal';
 
 interface DashboardProps {
   candidates: ApplicationRecord[];
@@ -31,6 +41,9 @@ interface DashboardProps {
   onNavigateTab: (tab: string) => void;
   onOpenAddCandidate: () => void;
   onOpenAddJob?: () => void;
+  onUpdateJob?: (job: JobProfile) => Promise<void> | void;
+  onDeleteJob?: (jobId: string) => Promise<void> | void;
+  onTogglePauseJob?: (jobId: string) => Promise<void> | void;
   isAnonymizedView: boolean;
 }
 
@@ -41,6 +54,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigateTab,
   onOpenAddCandidate,
   onOpenAddJob,
+  onUpdateJob,
+  onDeleteJob,
+  onTogglePauseJob,
   isAnonymizedView,
 }) => {
   // State for filtering dashboard by vacancy and stage
@@ -48,6 +64,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [selectedStageFilter, setSelectedStageFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+
+  // State for opening Vacancy Detail Modal from dashboard cards
+  const [selectedVacancyForModal, setSelectedVacancyForModal] = useState<JobProfile | null>(null);
 
   // Filter candidates by selected job vacancy first
   const jobFilteredCandidates = candidates.filter((c) => {
@@ -115,34 +134,34 @@ export const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="space-y-8">
       {/* Top Banner & Control Center Header */}
-      <div className="bg-white/80 backdrop-blur-xl border border-white/80 rounded-2xl p-7 text-slate-800 shadow-[0_10px_30px_rgba(15,23,42,0.04)] relative overflow-hidden">
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2.5 py-0.5 rounded-full border border-indigo-200/80">
-                Aura AI Recruiter Hub
+      <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 sm:p-7 text-slate-800 dark:text-slate-200 shadow-[0_10px_30px_rgba(15,23,42,0.04)] relative overflow-hidden">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] font-bold uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-200/80 dark:border-indigo-500/40">
+                Aura AI Platform
               </span>
-              <span className="text-xs bg-emerald-50 text-emerald-700 font-semibold px-2.5 py-0.5 rounded-full border border-emerald-200/80">
+              <span className="text-[11px] font-bold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-200/80 dark:border-emerald-500/40">
                 POPIA Compliant
               </span>
               {selectedJobId !== 'ALL' && selectedJobObject && (
-                <span className="text-xs bg-cyan-50 text-cyan-800 font-bold px-2.5 py-0.5 rounded-full border border-cyan-200 flex items-center gap-1">
-                  <Briefcase className="w-3 h-3 text-cyan-600" />
+                <span className="text-[11px] font-bold bg-cyan-50 dark:bg-cyan-950/60 text-cyan-800 dark:text-cyan-300 px-2.5 py-0.5 rounded-full border border-cyan-200 dark:border-cyan-500/40 flex items-center gap-1">
+                  <Briefcase className="w-3 h-3 text-cyan-600 dark:text-cyan-400" />
                   Filtered: {selectedJobObject.jobTitle}
                 </span>
               )}
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
               Recruiter Control Center
             </h1>
-            <p className="text-sm text-slate-600 mt-1.5 max-w-2xl leading-relaxed">
-              AI-driven candidate screening maintaining recruiter oversight across{' '}
-              <strong className="text-cyan-700 font-semibold">{jobs.length} open job vacancies</strong> in South Africa.
+            <p className="text-sm text-slate-600 dark:text-slate-400 max-w-2xl leading-relaxed">
+              AI-driven candidate screening and bias-free ranking across{' '}
+              <strong className="text-cyan-700 dark:text-cyan-400 font-semibold">{jobs.length} open job vacancies</strong> in South Africa.
             </p>
           </div>
 
           {/* Quick Action Controls & Job Vacancy Dropdown */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 shrink-0">
             {/* Vacancy Selector Dropdown */}
             <div className="relative">
               <label htmlFor="vacancy-filter-select" className="sr-only">Filter by Vacancy</label>
@@ -151,7 +170,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 aria-label="Filter dashboard by job vacancy"
                 value={selectedJobId}
                 onChange={(e) => setSelectedJobId(e.target.value)}
-                className="bg-slate-50 hover:bg-slate-100 text-slate-800 font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition cursor-pointer shadow-xs"
+                className="bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition cursor-pointer shadow-xs"
               >
                 <option value="ALL">All Vacancies ({jobs.length})</option>
                 {jobs.map((job) => (
@@ -164,10 +183,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
             <button
               onClick={() => onNavigateTab('workbench')}
-              className="bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-sm shadow-indigo-500/20 transition flex items-center space-x-2 active:scale-95"
+              className="bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-sm shadow-indigo-500/20 transition flex items-center space-x-2 active:scale-95 shrink-0"
             >
               <BrainCircuit className="w-4 h-4 text-white" />
-              <span>Launch Screening Engine</span>
+              <span>Launch Screening</span>
             </button>
 
             <button
@@ -175,7 +194,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 onNavigateTab('vacancies');
                 if (onOpenAddJob) onOpenAddJob();
               }}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition flex items-center space-x-1.5 shadow-sm active:scale-95"
+              className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition flex items-center space-x-1.5 shadow-sm active:scale-95 shrink-0"
             >
               <Plus className="w-4 h-4 text-emerald-400" />
               <span>New Vacancy</span>
@@ -347,14 +366,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
               (c) => c.category === 'Excellent Match' || c.category === 'Strong Match'
             ).length;
             const isSelected = selectedJobId === job.id;
+            const isPaused = job.status === 'Paused';
+            const salaryDisplay = formatMonthlySalaryRange(job.salaryMinZar, job.salaryMaxZar);
+            const annualPackage = calculateAnnualPackage(job.salaryMinZar, job.salaryMaxZar);
+            const closingIndicator = getClosingDateIndicator(job.closingDate);
+            const locationDisplay = formatLocationDisplay(job.location, job.locationType);
 
             return (
               <div
                 key={job.id}
-                className={`bg-slate-50/80 rounded-xl p-4 border transition-all duration-200 flex flex-col justify-between ${
-                  isSelected
+                onClick={() => setSelectedVacancyForModal(job)}
+                className={`rounded-xl p-4 border transition-all duration-200 flex flex-col justify-between cursor-pointer group hover:shadow-md ${
+                  isPaused
+                    ? 'opacity-65 grayscale-[20%] border-dashed border-amber-300 bg-amber-50/15'
+                    : isSelected
                     ? 'border-cyan-500 ring-2 ring-cyan-500/20 bg-cyan-50/30 shadow-md'
-                    : 'border-slate-200/80 hover:border-slate-300 hover:shadow-sm'
+                    : 'bg-slate-50/80 border-slate-200/80 hover:border-slate-300 hover:bg-slate-100/50'
                 }`}
               >
                 <div>
@@ -362,33 +389,62 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-slate-200/60 px-2 py-0.5 rounded">
                       {job.department}
                     </span>
-                    <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
-                      Open
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        isPaused
+                          ? 'bg-amber-100 text-amber-800 border-amber-300'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}
+                    >
+                      {job.status || 'Open'}
                     </span>
                   </div>
 
-                  <h3 className="font-bold text-sm text-slate-900 leading-snug line-clamp-2">{job.jobTitle}</h3>
+                  <h3 className="font-bold text-sm text-slate-900 leading-snug line-clamp-2 group-hover:text-cyan-700 transition">
+                    {job.jobTitle}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5 truncate">
+                    <Building2 className="w-3 h-3 text-slate-400 shrink-0" /> {job.company}
+                  </p>
 
-                  <div className="mt-2 space-y-1 text-xs text-slate-600">
+                  <div className="mt-2.5 space-y-1.5 text-xs text-slate-600">
                     <div className="flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>{job.location}</span>
+                      <span className="truncate">{locationDisplay}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <DollarSign className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>R{(job.salaryMinZar / 1000).toFixed(0)}k - R{(job.salaryMaxZar / 1000).toFixed(0)}k / yr</span>
+                      <DollarSign className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="font-semibold text-emerald-700">{salaryDisplay}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] bg-white/70 px-2 py-0.5 rounded border border-slate-200/60">
+                      <span className="text-slate-500">Annual:</span>
+                      <span className="font-semibold text-indigo-700">{annualPackage.displayText}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-0.5">
+                      <span className="text-slate-500 text-[11px] flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-slate-400" /> Closes:
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${closingIndicator.badgeClass}`}
+                      >
+                        <span className={`w-1 h-1 rounded-full ${closingIndicator.dotClass}`} />
+                        {closingIndicator.label}
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-slate-200/80">
                   <div className="flex justify-between items-center text-xs mb-3">
-                    <span className="text-slate-500">Applicants: <strong className="text-slate-900 font-bold">{jobApplicants.length}</strong></span>
+                    <span className="text-slate-500">
+                      Applicants: <strong className="text-slate-900 font-bold">{jobApplicants.length}</strong>
+                    </span>
                     <span className="text-emerald-700 font-semibold">{jobTopMatches} Top Match</span>
                   </div>
 
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
                     <button
+                      type="button"
                       onClick={() => setSelectedJobId(isSelected ? 'ALL' : job.id)}
                       className={`flex-1 text-xs py-1.5 rounded-lg font-semibold transition text-center ${
                         isSelected
@@ -399,6 +455,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       {isSelected ? 'Selected' : 'Filter Funnel'}
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         setSelectedJobId(job.id);
                         onNavigateTab('workbench');
@@ -737,6 +794,38 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Vacancy Detail Modal */}
+      {selectedVacancyForModal && (
+        <VacancyDetailModal
+          job={selectedVacancyForModal}
+          onClose={() => setSelectedVacancyForModal(null)}
+          onUpdateJob={async (updatedJob) => {
+            if (onUpdateJob) {
+              await onUpdateJob(updatedJob);
+            }
+            setSelectedVacancyForModal(updatedJob);
+          }}
+          onDeleteJob={async (jobId) => {
+            if (onDeleteJob) {
+              await onDeleteJob(jobId);
+            }
+            setSelectedVacancyForModal(null);
+          }}
+          onTogglePauseJob={async (jobId) => {
+            if (onTogglePauseJob) {
+              await onTogglePauseJob(jobId);
+            }
+            setSelectedVacancyForModal((prev) =>
+              prev ? { ...prev, status: prev.status === 'Paused' ? 'Open' : 'Paused' } : null
+            );
+          }}
+          onNavigateToWorkbench={(jobId) => {
+            setSelectedJobId(jobId);
+            onNavigateTab('workbench');
+          }}
+        />
+      )}
     </div>
   );
 };

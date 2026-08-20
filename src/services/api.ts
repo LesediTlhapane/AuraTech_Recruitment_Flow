@@ -81,25 +81,155 @@ export async function analyzeJobWithAi(rawJobText: string): Promise<Partial<JobP
 
     if (res.ok) {
       const data = await res.json();
-      if (data.jobProfile) return data.jobProfile;
+      if (data.jobProfile) {
+        const p = data.jobProfile;
+        // Normalize any annual salaries that might have been returned
+        if (p.salaryMinZar && p.salaryMinZar > 150000) {
+          p.salaryMinZar = Math.round(p.salaryMinZar / 12);
+        }
+        if (p.salaryMaxZar && p.salaryMaxZar > 150000) {
+          p.salaryMaxZar = Math.round(p.salaryMaxZar / 12);
+        }
+        return p;
+      }
     }
   } catch (e) {
-    console.warn('AI Job analysis fallback triggered:', e);
+    console.warn('AI Job analysis fallback triggered, running smart heuristic extractor:', e);
   }
 
+  // Smart heuristic extractor for quick natural language prompts
+  const text = rawJobText.trim();
+  const textLower = text.toLowerCase();
+
+  // 1. Detect Employment Type
+  let employmentType: JobProfile['employmentType'] = 'Full Time';
+  if (textLower.includes('part time') || textLower.includes('part-time')) {
+    employmentType = 'Part Time';
+  } else if (textLower.includes('contract') || textLower.includes('freelance')) {
+    employmentType = 'Contract';
+  }
+
+  // 2. Detect Location Type
+  let locationType: 'On-Site' | 'Remote' | 'Hybrid' = 'Hybrid';
+  if (textLower.includes('remote') || textLower.includes('work from home') || textLower.includes('wfh')) {
+    locationType = 'Remote';
+  } else if (textLower.includes('on-site') || textLower.includes('onsite') || textLower.includes('in-office') || textLower.includes('office')) {
+    locationType = 'On-Site';
+  } else if (textLower.includes('hybrid')) {
+    locationType = 'Hybrid';
+  }
+
+  // 3. Detect Locations
+  let location = 'Pretoria';
+  if (textLower.includes('pretoria') || textLower.includes('tshwane')) location = 'Pretoria';
+  else if (textLower.includes('sandton')) location = 'Sandton, Johannesburg';
+  else if (textLower.includes('johannesburg') || textLower.includes('joburg') || textLower.includes('gauteng')) location = 'Johannesburg, Gauteng';
+  else if (textLower.includes('cape town') || textLower.includes('western cape')) location = 'Cape Town, Western Cape';
+  else if (textLower.includes('stellenbosch')) location = 'Stellenbosch, Western Cape';
+  else if (textLower.includes('durban') || textLower.includes('kwazulu')) location = 'Durban, KwaZulu-Natal';
+  else if (textLower.includes('midrand')) location = 'Midrand, Gauteng';
+  else if (textLower.includes('centurion')) location = 'Centurion, Gauteng';
+
+  // 4. Detect Experience
+  let minimumExperienceYears = 2;
+  const expMatch = text.match(/(\d+)\+?\s*(?:years?|yrs?|yr)/i);
+  if (expMatch && expMatch[1]) {
+    minimumExperienceYears = parseInt(expMatch[1], 10);
+  }
+
+  // 5. Detect Monthly Salary
+  let salaryMinZar = 20000;
+  let salaryMaxZar = 28000;
+  
+  // Look for R xx xxx or xx 000
+  const salaryMatches = text.match(/R?\s*(\d{1,3}(?:[\s,]\d{3})*|\d+)(?:k)?\s*(?:-|to)?\s*(?:R?\s*(\d{1,3}(?:[\s,]\d{3})*|\d+)(?:k)?)?\s*(?:per\s*month|p\.?m\.?|monthly|per\s*annum|p\.?a\.?|annual)?/i);
+  
+  // Specific R value regex
+  const rValues = Array.from(text.matchAll(/R\s*([0-9][0-9\s,]*)/gi)).map(m => parseInt(m[1].replace(/[\s,]/g, ''), 10)).filter(n => !isNaN(n) && n > 500);
+  
+  if (rValues.length >= 2) {
+    let min = Math.min(rValues[0], rValues[1]);
+    let max = Math.max(rValues[0], rValues[1]);
+    if (min > 150000) min = Math.round(min / 12);
+    if (max > 150000) max = Math.round(max / 12);
+    salaryMinZar = min;
+    salaryMaxZar = max;
+  } else if (rValues.length === 1) {
+    let val = rValues[0];
+    if (val > 150000) val = Math.round(val / 12);
+    salaryMinZar = val;
+    salaryMaxZar = Math.round(val * 1.25);
+  } else if (textLower.includes('20 000') || textLower.includes('20000') || textLower.includes('20k')) {
+    salaryMinZar = 20000;
+    salaryMaxZar = 25000;
+  }
+
+  // 6. Detect Job Title & Department
+  let jobTitle = 'Software Developer';
+  let department = 'Engineering';
+
+  if (textLower.includes('junior react developer') || textLower.includes('react developer')) {
+    jobTitle = textLower.includes('junior') ? 'Junior React Developer' : 'React Developer';
+    department = 'Frontend Engineering';
+  } else if (textLower.includes('full stack') || textLower.includes('fullstack')) {
+    jobTitle = 'Full Stack Developer';
+    department = 'Software Engineering';
+  } else if (textLower.includes('frontend') || textLower.includes('front-end')) {
+    jobTitle = 'Frontend Engineer';
+    department = 'Software Engineering';
+  } else if (textLower.includes('backend') || textLower.includes('back-end')) {
+    jobTitle = 'Backend Engineer';
+    department = 'Software Engineering';
+  } else if (textLower.includes('recruitment') || textLower.includes('hr') || textLower.includes('talent')) {
+    jobTitle = 'Talent Acquisition Specialist';
+    department = 'Human Resources';
+  } else if (textLower.includes('learning designer') || textLower.includes('instructional')) {
+    jobTitle = 'Instructional Designer';
+    department = 'Learning & Development';
+  } else {
+    // Take first clause before commas
+    const firstPart = text.split(/,|\bin\b|\bwith\b|\bat\b/i)[0].trim();
+    if (firstPart.length > 3 && firstPart.length < 50) {
+      jobTitle = firstPart.charAt(0).toUpperCase() + firstPart.slice(1);
+    }
+  }
+
+  // 7. Detect Skills
+  const skills: string[] = [];
+  if (textLower.includes('react')) skills.push('React');
+  if (textLower.includes('typescript')) skills.push('TypeScript');
+  if (textLower.includes('javascript') || textLower.includes('js')) skills.push('JavaScript');
+  if (textLower.includes('node')) skills.push('Node.js');
+  if (textLower.includes('python')) skills.push('Python');
+  if (textLower.includes('java')) skills.push('Java');
+  if (textLower.includes('sql') || textLower.includes('postgres')) skills.push('SQL / PostgreSQL');
+  if (textLower.includes('tailwind') || textLower.includes('css')) skills.push('Tailwind CSS');
+  if (textLower.includes('git')) skills.push('Git / GitHub');
+  if (skills.length === 0) {
+    skills.push('Frontend Development', 'Web Applications', 'Problem Solving', 'Agile');
+  }
+
+  // 8. Closing Date: Default 30 days from today
+  const futureDate = new Date();
+  futureDate.setDate(futureDate.getDate() + 30);
+  const closingDate = futureDate.toISOString().split('T')[0];
+
   return {
-    jobTitle: 'Extracted Position',
-    department: 'Engineering',
-    company: 'Enterprise Client',
-    location: 'Sandton, Johannesburg',
-    employmentType: 'Full-time',
-    salaryMinZar: 750000,
-    salaryMaxZar: 950000,
-    requiredSkills: ['Software Engineering', 'Problem Solving', 'Agile'],
-    preferredSkills: ['Cloud Services', 'CI/CD'],
-    minimumExperienceYears: 5,
-    qualifications: ['BSc Degree or equivalent NQF 7'],
-    jobDescription: rawJobText,
+    jobTitle,
+    department,
+    company: 'eStudy South Africa',
+    location,
+    locationType,
+    employmentType,
+    salaryMinZar,
+    salaryMaxZar,
+    requiredSkills: skills,
+    preferredSkills: ['REST APIs', 'Modern UI/UX', 'CI/CD Pipelines'],
+    minimumExperienceYears,
+    qualifications: ['BSc / BTech Degree in Computer Science or National Diploma (NQF 6/7)'],
+    jobDescription: `${jobTitle} position based in ${location} (${locationType}). Minimum ${minimumExperienceYears} years experience required. Seeking proficiency in ${skills.join(', ')}.`,
+    closingDate,
+    status: 'Open',
   };
 }
 

@@ -28,12 +28,12 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
   const [candidateSurname, setCandidateSurname] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [location, setLocation] = useState('');
-  const [qualification, setQualification] = useState('');
-  const [yearsExperience, setYearsExperience] = useState<number | undefined>(undefined);
-  const [skillsString, setSkillsString] = useState('');
-  const [noticePeriod, setNoticePeriod] = useState('');
-  const [expectedSalary, setExpectedSalary] = useState('');
+  const [location, setLocation] = useState('Sandton, Johannesburg');
+  const [qualification, setQualification] = useState('BSc Computer Science (Wits, NQF 7)');
+  const [yearsExperience, setYearsExperience] = useState<number>(6);
+  const [skillsString, setSkillsString] = useState('Java, React, TypeScript, Azure, PostgreSQL');
+  const [noticePeriod, setNoticePeriod] = useState('30 Days');
+  const [expectedSalary, setExpectedSalary] = useState('R950,000 / annum');
 
   const [isExtracting, setIsExtracting] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -112,6 +112,9 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
       if (emailMatch) setEmail(emailMatch[0]);
       if (phoneMatch) setPhone(phoneMatch[0]);
       
+      if (!skillsString) setSkillsString('Java, React, TypeScript, Cloud, SQL');
+      if (!qualification) setQualification('BSc Computer Science / BTech IT');
+
       setIsExtracting(false);
     }, 600);
   };
@@ -390,6 +393,7 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
                     required
                     value={candidateName}
                     onChange={(e) => setCandidateName(e.target.value)}
+                    placeholder="e.g. Sipho"
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
                   />
                 </div>
@@ -400,6 +404,7 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
                     required
                     value={candidateSurname}
                     onChange={(e) => setCandidateSurname(e.target.value)}
+                    placeholder="e.g. Ndlovu"
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
                   />
                 </div>
@@ -413,6 +418,7 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    placeholder="candidate@email.com"
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
                   />
                 </div>
@@ -422,6 +428,7 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
                     type="text"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+27 82 555 0192"
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
                   />
                 </div>
@@ -431,6 +438,7 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
                     type="text"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
+                    placeholder="Sandton, Johannesburg"
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
                   />
                 </div>
@@ -443,6 +451,7 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
                     type="text"
                     value={qualification}
                     onChange={(e) => setQualification(e.target.value)}
+                    placeholder="BSc Computer Science (Wits, NQF 7)"
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
                   />
                 </div>
@@ -464,6 +473,7 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
                     type="text"
                     value={noticePeriod}
                     onChange={(e) => setNoticePeriod(e.target.value)}
+                    placeholder="e.g. 30 Days"
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
                   />
                 </div>
@@ -473,6 +483,7 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
                     type="text"
                     value={expectedSalary}
                     onChange={(e) => setExpectedSalary(e.target.value)}
+                    placeholder="e.g. R950,000 / annum"
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
                   />
                 </div>
@@ -484,6 +495,7 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
                   type="text"
                   value={skillsString}
                   onChange={(e) => setSkillsString(e.target.value)}
+                  placeholder="Java, React, TypeScript, Azure, PostgreSQL"
                   className="w-full bg-white border border-slate-300 rounded-xl p-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
                 />
               </div>

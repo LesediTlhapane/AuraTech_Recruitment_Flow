@@ -15,17 +15,17 @@ export const AuraLogo: React.FC<AuraLogoProps> = ({
 }) => {
   // Dimensions
   const dimensions = {
-    sm: { iconWidth: 32, iconHeight: 32, fontSizeMain: 'text-sm', fontSizeSub: 'text-[9px]' },
-    md: { iconWidth: 44, iconHeight: 44, fontSizeMain: 'text-lg', fontSizeSub: 'text-[10px]' },
-    lg: { iconWidth: 56, iconHeight: 56, fontSizeMain: 'text-xl', fontSizeSub: 'text-xs' },
-    xl: { iconWidth: 80, iconHeight: 80, fontSizeMain: 'text-3xl', fontSizeSub: 'text-sm' },
+    sm: { iconWidth: 30, iconHeight: 30, fontSizeMain: 'text-xs sm:text-sm', fontSizeSub: 'text-[7.5px]', hyphenWidth: 'w-2', gap: 'gap-0.5' },
+    md: { iconWidth: 40, iconHeight: 40, fontSizeMain: 'text-sm sm:text-base font-extrabold', fontSizeSub: 'text-[8.5px]', hyphenWidth: 'w-2.5', gap: 'gap-0.5' },
+    lg: { iconWidth: 54, iconHeight: 54, fontSizeMain: 'text-xl font-black', fontSizeSub: 'text-[10px]', hyphenWidth: 'w-3.5', gap: 'gap-1' },
+    xl: { iconWidth: 76, iconHeight: 76, fontSizeMain: 'text-3xl font-black', fontSizeSub: 'text-xs', hyphenWidth: 'w-4', gap: 'gap-1.5' },
   }[size];
 
   const mainTextColor = variant === 'dark' ? 'text-white' : 'text-slate-900';
   const subTextColor = variant === 'dark' ? 'text-slate-300' : 'text-slate-600';
 
   return (
-    <div className={`inline-flex items-center gap-3 ${className}`}>
+    <div className={`inline-flex items-center gap-2.5 sm:gap-3 shrink-0 select-none ${className}`}>
       {/* Aura Tech Brain Neural SVG Mark */}
       <svg
         width={dimensions.iconWidth}
@@ -33,7 +33,7 @@ export const AuraLogo: React.FC<AuraLogoProps> = ({
         viewBox="0 0 200 180"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="shrink-0 drop-shadow-sm transition-transform hover:scale-105"
+        className="shrink-0 drop-shadow-xs transition-transform hover:scale-105"
       >
         <defs>
           {/* Facet Gradients */}
@@ -139,18 +139,28 @@ export const AuraLogo: React.FC<AuraLogoProps> = ({
 
       {/* Typography */}
       {showText && (
-        <div className="flex flex-col justify-center items-center">
-          <div className="flex items-center justify-center w-full gap-1.5 leading-none">
+        <div className="flex flex-col justify-center items-center text-center select-none">
+          {/* Row 1: AURA TECH (kept as is) */}
+          <div className="flex items-center justify-center w-full leading-none">
             <span className={`font-black tracking-tight ${dimensions.fontSizeMain} ${mainTextColor}`}>
               AURA <span className="text-cyan-600 dark:text-cyan-400">TECH</span>
             </span>
           </div>
-          <div className="flex items-center justify-center gap-1.5 mt-1">
-            <span className="h-[1.5px] w-3.5 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full shrink-0" />
+
+          {/* Row 2: RECRUITMENT (centered under AURA TECH) */}
+          <div className="flex items-center justify-center w-full mt-0.5 leading-none">
             <span className={`font-bold tracking-widest uppercase ${dimensions.fontSizeSub} ${subTextColor}`}>
-              RECRUITMENT FLOW AI
+              RECRUITMENT
             </span>
-            <span className="h-[1.5px] w-3.5 bg-gradient-to-r from-purple-500 to-amber-500 rounded-full shrink-0" />
+          </div>
+
+          {/* Row 3: FLOW AI (centered underneath RECRUITMENT with coloured hyphens on the sides) */}
+          <div className="flex items-center justify-center gap-1.5 mt-0.5 leading-none">
+            <span className={`h-[1.5px] ${dimensions.hyphenWidth} bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full shrink-0`} />
+            <span className={`font-bold tracking-widest uppercase ${dimensions.fontSizeSub} ${subTextColor}`}>
+              FLOW AI
+            </span>
+            <span className={`h-[1.5px] ${dimensions.hyphenWidth} bg-gradient-to-r from-purple-500 to-amber-500 rounded-full shrink-0`} />
           </div>
         </div>
       )}

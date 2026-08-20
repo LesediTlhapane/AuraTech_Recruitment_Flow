@@ -1,4 +1,8 @@
-export type EmploymentType = 'Full-time' | 'Part-time' | 'Contract' | 'Hybrid' | 'Remote';
+export type LocationType = 'On-Site' | 'Remote' | 'Hybrid';
+
+export type EmploymentType = 'Full Time' | 'Part Time' | 'Contract' | 'Full-time' | 'Part-time' | 'Hybrid' | 'Remote';
+
+export type VacancyStatus = 'Open' | 'Paused' | 'Closed' | 'Draft' | 'On Hold';
 
 export type CandidateCategory = 'Excellent Match' | 'Strong Match' | 'Suitable' | 'Potential' | 'Not Suitable';
 
@@ -21,17 +25,18 @@ export interface JobProfile {
   department: string;
   company: string;
   location: string;
+  locationType?: LocationType;
   employmentType: EmploymentType;
-  salaryMinZar: number;
-  salaryMaxZar: number;
+  salaryMinZar: number; // Monthly salary in ZAR
+  salaryMaxZar: number; // Monthly salary in ZAR
   requiredSkills: string[];
   preferredSkills: string[];
   minimumExperienceYears: number;
   qualifications: string[]; // e.g. ["BSc Computer Science or equivalent NQF 7"]
   jobDescription: string;
-  closingDate: string;
+  closingDate: string; // YYYY-MM-DD
   createdDate: string;
-  status: 'Open' | 'Closed' | 'Draft';
+  status: VacancyStatus;
   applicantCount?: number;
 }
 
