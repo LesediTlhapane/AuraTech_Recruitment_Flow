@@ -1041,11 +1041,74 @@ export function App() {
       console.error('Failed to save job to Supabase:', error);
     } else {
       console.log('Job successfully saved to Supabase:', data);
+      if (data?.id) {
+        setJobs((prev) =>
+          prev.map((job) =>
+            job.id === newJob.id
+              ? { ...job, id: String(data.id) }
+              : job
+          )
+        );
+      }
     }
   } catch (error) {
     console.error('Supabase job save error:', error);
   }
 };
+
+  const handleUpdateJob = async (updatedJob: JobProfile) => {
+    setJobs((prev) =>
+      prev.map((job) => (job.id === updatedJob.id ? updatedJob : job))
+    );
+
+    addAuditLog(
+      'Job Profile Updated',
+      `Updated internal structured job profile for "${updatedJob.jobTitle}".`,
+      undefined,
+      'JOB_UPDATED'
+    );
+
+    if (!isSupabaseConfigured) {
+      console.log(
+        'Supabase not configured. Job update stored in local application state only.'
+      );
+      return;
+    }
+
+    const vacancyUuid = nullableUuid(updatedJob.id);
+    if (!vacancyUuid) {
+      console.warn('Cannot update vacancy without a valid Supabase UUID:', updatedJob.id);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('vacancies')
+        .update({
+          title: updatedJob.jobTitle,
+          job_title: updatedJob.jobTitle,
+          department: updatedJob.department,
+          company: updatedJob.company,
+          location: updatedJob.location,
+          employment_type: updatedJob.employmentType,
+          salary_min_zar: Number(updatedJob.salaryMinZar || 0),
+          salary_max_zar: Number(updatedJob.salaryMaxZar || 0),
+          required_skills: updatedJob.requiredSkills || [],
+          preferred_skills: updatedJob.preferredSkills || [],
+          minimum_experience_years: Number(updatedJob.minimumExperienceYears || 0),
+          qualifications: updatedJob.qualifications || [],
+          job_description: updatedJob.jobDescription || '',
+          closing_date: updatedJob.closingDate || null,
+        })
+        .eq('id', vacancyUuid);
+
+      if (error) {
+        console.error('Failed to update job in Supabase:', error);
+      }
+    } catch (error) {
+      console.error('Supabase job update error:', error);
+    }
+  };
 
   // ============================================================
   // ADD CANDIDATE
@@ -1711,6 +1774,7 @@ export function App() {
           <Vacancies
             jobs={jobs}
             onAddJob={handleAddJob}
+            onUpdateJob={handleUpdateJob}
             isOpenAddModal={
               isOpenAddJobModal
             }

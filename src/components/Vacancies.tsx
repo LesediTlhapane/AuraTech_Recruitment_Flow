@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { JobProfile, EmploymentType } from '../types';
-import { Plus, Sparkles, Building2, MapPin, DollarSign, Calendar, Clock, FileText, Search, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Sparkles, Building2, MapPin, DollarSign, Calendar, Clock, FileText, Search, Trash2, AlertTriangle, Pencil } from 'lucide-react';
 import { analyzeJobWithAi } from '../services/api';
 
 interface VacanciesProps {
   jobs: JobProfile[];
   onAddJob: (job: JobProfile) => void;
+  onUpdateJob: (job: JobProfile) => void;
   onDeleteJob?: (jobId: string) => void;
   isOpenAddModal: boolean;
   setIsOpenAddModal: (val: boolean) => void;
@@ -14,6 +15,7 @@ interface VacanciesProps {
 export const Vacancies: React.FC<VacanciesProps> = ({
   jobs,
   onAddJob,
+  onUpdateJob,
   onDeleteJob,
   isOpenAddModal,
   setIsOpenAddModal,
@@ -21,6 +23,7 @@ export const Vacancies: React.FC<VacanciesProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [rawSpecText, setRawSpecText] = useState('');
+  const [jobBeingEdited, setJobBeingEdited] = useState<JobProfile | null>(null);
 
   // Delete Confirmation State
   const [jobToDelete, setJobToDelete] = useState<JobProfile | null>(null);
@@ -28,22 +31,22 @@ export const Vacancies: React.FC<VacanciesProps> = ({
   // Form State
   const [formData, setFormData] = useState<Partial<JobProfile>>({
     jobTitle: '',
-    department: 'Engineering',
-    company: 'FinTech Dynamics South Africa',
-    location: 'Sandton, Johannesburg (Hybrid)',
-    employmentType: 'Full-time',
-    salaryMinZar: 750000,
-    salaryMaxZar: 950000,
-    requiredSkills: ['Java', 'React', 'TypeScript', 'SQL'],
-    preferredSkills: ['Azure', 'Microservices'],
-    minimumExperienceYears: 5,
-    qualifications: ['BSc Computer Science or equivalent (NQF 7)'],
+    department: '',
+    company: '',
+    location: '',
+    employmentType: undefined,
+    salaryMinZar: undefined,
+    salaryMaxZar: undefined,
+    requiredSkills: [],
+    preferredSkills: [],
+    minimumExperienceYears: undefined,
+    qualifications: [],
     jobDescription: '',
-    closingDate: '2026-09-30',
+    closingDate: '',
   });
 
-  const [skillsInput, setSkillsInput] = useState('Java, React, TypeScript, SQL');
-  const [preferredSkillsInput, setPreferredSkillsInput] = useState('Azure, Microservices');
+  const [skillsInput, setSkillsInput] = useState('');
+  const [preferredSkillsInput, setPreferredSkillsInput] = useState('');
 
   const filteredJobs = jobs.filter((j) =>
     j.jobTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -73,30 +76,50 @@ export const Vacancies: React.FC<VacanciesProps> = ({
     e.preventDefault();
     if (!formData.jobTitle) return;
 
-    const newJob: JobProfile = {
-      id: `job-${Date.now()}`,
+    const savedJob: JobProfile = {
+      id: jobBeingEdited?.id || `job-${Date.now()}`,
       jobTitle: formData.jobTitle || 'New Position',
-      department: formData.department || 'General',
-      company: formData.company || 'Enterprise SA',
-      location: formData.location || 'South Africa',
+      department: formData.department || '',
+      company: formData.company || '',
+      location: formData.location || '',
       employmentType: (formData.employmentType as EmploymentType) || 'Full-time',
-      salaryMinZar: Number(formData.salaryMinZar) || 600000,
-      salaryMaxZar: Number(formData.salaryMaxZar) || 850000,
+      salaryMinZar: Number(formData.salaryMinZar) || 0,
+      salaryMaxZar: Number(formData.salaryMaxZar) || 0,
       requiredSkills: skillsInput.split(',').map((s) => s.trim()).filter(Boolean),
       preferredSkills: preferredSkillsInput.split(',').map((s) => s.trim()).filter(Boolean),
-      minimumExperienceYears: Number(formData.minimumExperienceYears) || 3,
+      minimumExperienceYears: Number(formData.minimumExperienceYears) || 0,
       qualifications: typeof formData.qualifications === 'string' 
         ? [formData.qualifications] 
-        : formData.qualifications || ['Relevant Degree'],
-      jobDescription: formData.jobDescription || 'Standard Job Description',
-      closingDate: formData.closingDate || '2026-09-30',
-      createdDate: new Date().toISOString().split('T')[0],
-      status: 'Open',
-      applicantCount: 0,
+        : formData.qualifications || [],
+      jobDescription: formData.jobDescription || '',
+      closingDate: formData.closingDate || '',
+      createdDate: jobBeingEdited?.createdDate || new Date().toISOString().split('T')[0],
+      status: jobBeingEdited?.status || 'Open',
+      applicantCount: jobBeingEdited?.applicantCount || 0,
     };
 
-    onAddJob(newJob);
+    if (jobBeingEdited) {
+      onUpdateJob(savedJob);
+    } else {
+      onAddJob(savedJob);
+    }
+    setJobBeingEdited(null);
     setIsOpenAddModal(false);
+  };
+
+  const openCreateModal = () => {
+    setJobBeingEdited(null);
+    setRawSpecText('');
+    setIsOpenAddModal(true);
+  };
+
+  const openEditModal = (job: JobProfile) => {
+    setJobBeingEdited(job);
+    setFormData(job);
+    setSkillsInput(job.requiredSkills.join(', '));
+    setPreferredSkillsInput(job.preferredSkills.join(', '));
+    setRawSpecText('');
+    setIsOpenAddModal(true);
   };
 
   return (
@@ -124,7 +147,7 @@ export const Vacancies: React.FC<VacanciesProps> = ({
             />
           </div>
           <button
-            onClick={() => setIsOpenAddModal(true)}
+            onClick={openCreateModal}
             className="bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-sm shadow-indigo-500/20 transition flex items-center space-x-1.5 active:scale-95"
           >
             <Plus className="w-4 h-4 text-white" />
@@ -138,6 +161,12 @@ export const Vacancies: React.FC<VacanciesProps> = ({
         {filteredJobs.map((job) => (
           <div
             key={job.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => openEditModal(job)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') openEditModal(job);
+            }}
             className="bg-white/80 backdrop-blur-xl border border-white/80 rounded-2xl p-6 hover:shadow-[0_20px_40px_rgba(15,23,42,0.07)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]"
           >
             <div>
@@ -157,7 +186,10 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                   </span>
                   {onDeleteJob && (
                     <button
-                      onClick={() => setJobToDelete(job)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setJobToDelete(job);
+                      }}
                       title="Delete Vacancy from Database & System"
                       className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-200 transition"
                     >
@@ -218,7 +250,7 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                 <strong className="text-slate-900 font-bold">{job.applicantCount || 0}</strong> Applicants Received
               </span>
               <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full border border-indigo-200/80 font-semibold">
-                Internal Profile Generated
+                <Pencil className="w-3 h-3 inline mr-1" /> Edit Profile
               </span>
             </div>
           </div>
@@ -242,9 +274,9 @@ export const Vacancies: React.FC<VacanciesProps> = ({
             <div className="flex justify-between items-center border-b border-slate-200 pb-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-cyan-600" /> Generate Structured Job Profile
+                  <FileText className="w-5 h-5 text-cyan-600" /> {jobBeingEdited ? 'Edit Job Profile' : 'Generate Structured Job Profile'}
                 </h2>
-                <p className="text-xs text-slate-500">Step 1: Input job parameters or paste raw job spec for AI parsing.</p>
+                  <p className="text-xs text-slate-500">{jobBeingEdited ? 'Update the vacancy details below.' : 'Step 1: Input job parameters or paste raw job spec for AI parsing.'}</p>
               </div>
               <button
                 onClick={() => setIsOpenAddModal(false)}
@@ -394,7 +426,7 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                   type="submit"
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-5 py-2 rounded-xl shadow-xs"
                 >
-                  Save Job Profile
+                  {jobBeingEdited ? 'Save Changes' : 'Save Job Profile'}
                 </button>
               </div>
             </form>
