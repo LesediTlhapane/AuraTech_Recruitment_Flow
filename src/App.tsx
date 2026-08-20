@@ -339,9 +339,16 @@ export function App() {
         // MAP VACANCIES
         // ========================================================
 
-        const mappedJobs: JobProfile[] =
-          (vacanciesResult.data || []).map(
-            (vacancy: any) => {
+        const mappedJobs: JobProfile[] = (vacanciesResult.data || [])
+          .filter((vacancy: any) => {
+            const rawStatus = String(vacancy.status || '').toLowerCase();
+            return (
+              !rawStatus.includes('delete') &&
+              !rawStatus.includes('archive') &&
+              !vacancy.is_deleted
+            );
+          })
+          .map((vacancy: any) => {
               const rawLocation = vacancy.location || 'South Africa';
               const rawLocLower = String(rawLocation).toLowerCase();
               const deducedLocationType: LocationType = vacancy.location_type || vacancy.locationType || (
@@ -1163,6 +1170,15 @@ export function App() {
     const targetJob = jobs.find((j) => j.id === jobId);
     setJobs((prev) => prev.filter((j) => j.id !== jobId));
 
+    // Also update any candidates linked to this vacancy in local state
+    setCandidates((prev) =>
+      prev.map((c) =>
+        c.jobId === jobId
+          ? { ...c, jobTitle: `${c.jobTitle || 'Role'} (Archived Vacancy)` }
+          : c
+      )
+    );
+
     addAuditLog(
       'Job Profile Deleted',
       `Removed vacancy profile "${targetJob?.jobTitle || jobId}" from active database.`,
@@ -1179,13 +1195,42 @@ export function App() {
         return;
       }
 
-      const { error } = await supabase
+      // Step 1: Clean up child dependencies in Supabase to avoid Foreign Key violations
+      try {
+        await supabase.from('interviews').delete().eq('vacancy_id', vacancyUuid);
+      } catch (fkErr) {
+        console.warn('Interviews cleanup notice:', fkErr);
+      }
+
+      try {
+        await supabase.from('screenings').delete().eq('vacancy_id', vacancyUuid);
+      } catch (fkErr) {
+        console.warn('Screenings cleanup notice:', fkErr);
+      }
+
+      // Step 2: Attempt direct hard delete on vacancies
+      const { error: deleteError } = await supabase
         .from('vacancies')
         .delete()
         .eq('id', vacancyUuid);
 
-      if (error) {
-        console.error('Failed to delete job from Supabase:', error);
+      if (deleteError) {
+        console.warn('Direct DELETE on vacancies encountered policy or constraint, applying soft-delete fallback:', deleteError);
+
+        // Step 3: Resilient Soft-Delete Fallback (sets status to deleted so it never loads again)
+        const { error: updateError } = await supabase
+          .from('vacancies')
+          .update({
+            status: 'deleted',
+            closing_date: new Date().toISOString(),
+          })
+          .eq('id', vacancyUuid);
+
+        if (updateError) {
+          console.error('Failed to update vacancy status to deleted:', updateError);
+        } else {
+          console.log('Vacancy successfully marked as deleted in Supabase.');
+        }
       } else {
         console.log('Job successfully deleted from Supabase:', jobId);
       }
