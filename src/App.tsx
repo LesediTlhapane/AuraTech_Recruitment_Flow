@@ -1209,15 +1209,21 @@ export function App() {
       }
 
       // Step 2: Attempt direct hard delete on vacancies
-      const { error: deleteError } = await supabase
+      const { data: deletedRows, error: deleteError } = await supabase
         .from('vacancies')
         .delete()
-        .eq('id', vacancyUuid);
+        .eq('id', vacancyUuid)
+        .select();
 
-      if (deleteError) {
-        console.warn('Direct DELETE on vacancies encountered policy or constraint, applying soft-delete fallback:', deleteError);
+      const wasHardDeleted = !deleteError && Array.isArray(deletedRows) && deletedRows.length > 0;
 
-        // Step 3: Resilient Soft-Delete Fallback (sets status to deleted so it never loads again)
+      if (!wasHardDeleted) {
+        console.warn(
+          'Notice: Supabase RLS blocked hard-delete (0 rows removed). Marking status as "deleted" in Supabase table.',
+          deleteError
+        );
+
+        // Step 3: Mark status as 'deleted' in Supabase so the app never displays it
         const { error: updateError } = await supabase
           .from('vacancies')
           .update({
@@ -1229,10 +1235,10 @@ export function App() {
         if (updateError) {
           console.error('Failed to update vacancy status to deleted:', updateError);
         } else {
-          console.log('Vacancy successfully marked as deleted in Supabase.');
+          console.log('Vacancy marked as "deleted" in Supabase table.');
         }
       } else {
-        console.log('Job successfully deleted from Supabase:', jobId);
+        console.log('Job permanently deleted from Supabase database table:', jobId);
       }
     } catch (error) {
       console.error('Supabase job delete error:', error);

@@ -540,7 +540,6 @@ export const Vacancies: React.FC<VacanciesProps> = ({
                     value={formData.jobTitle || ''}
                     onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs font-semibold"
-                    placeholder="e.g. Junior React Developer"
                   />
                 </div>
 
