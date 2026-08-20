@@ -177,19 +177,23 @@ export const CandidatesList: React.FC<CandidatesListProps> = ({
           </div>
         ) : (
           displayedList.map((cand, index) => {
+            const isMuted = cand.isPaused || cand.status === 'On Hold';
             const displayName = isAnonymizedView 
               ? `Candidate #${cand.id.replace('cand-', '')}`
-              : cand.extractedData ? `${cand.extractedData.name} ${cand.extractedData.surname}` : `Candidate #${cand.id}`;
+              : cand.extractedData ? `${cand.extractedData.name} ${cand.extractedData.surname}`.trim() : `Candidate #${cand.id}`;
 
             return (
               <div
                 key={cand.id}
-                className="bg-white/80 backdrop-blur-xl border border-white/80 rounded-2xl p-6 hover:shadow-[0_20px_40px_rgba(15,23,42,0.07)] hover:-translate-y-0.5 transition-all duration-300 space-y-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]"
+                onClick={() => onSelectCandidate(cand)}
+                className={`bg-white/80 backdrop-blur-xl border border-white/80 rounded-2xl p-6 hover:shadow-[0_20px_40px_rgba(15,23,42,0.07)] hover:-translate-y-0.5 transition-all duration-300 space-y-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] cursor-pointer ${
+                  isMuted ? 'opacity-65 filter grayscale-[25%] border-amber-200/80 bg-amber-50/20' : ''
+                }`}
               >
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   {/* Left Column: Candidate Info */}
                   <div className="space-y-1.5">
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                       {viewMode === 'top10' && (
                         <span className="bg-amber-500 text-slate-950 font-black text-xs px-2 py-0.5 rounded-md">
                           #{index + 1}
@@ -205,6 +209,11 @@ export const CandidatesList: React.FC<CandidatesListProps> = ({
                       }`}>
                         {cand.category}
                       </span>
+                      {isMuted && (
+                        <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                          Paused / Muted
+                        </span>
+                      )}
                     </div>
 
                     <p className="text-xs text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -234,10 +243,13 @@ export const CandidatesList: React.FC<CandidatesListProps> = ({
 
                     {/* Action buttons */}
                     <button
-                      onClick={() => onSelectCandidate(cand)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectCandidate(cand);
+                      }}
                       className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-xs transition active:scale-95"
                     >
-                      Deep-Dive Inspection
+                      Candidate Profile
                     </button>
                   </div>
                 </div>

@@ -472,7 +472,15 @@ export function App() {
           screeningsResult.data || [];
 
         const mappedCandidates: ApplicationRecord[] =
-          (candidatesResult.data || []).map(
+          (candidatesResult.data || [])
+            .filter((candidate: any) => {
+              const rawStatus = String(candidate.status || '').toLowerCase();
+              return (
+                !rawStatus.includes('delete') &&
+                !candidate.is_deleted
+              );
+            })
+            .map(
             (candidate: any) => {
               const candidateId =
                 String(candidate.id);
@@ -605,6 +613,7 @@ export function App() {
                 risks,
                 summary,
                 status: candidate.status === 'interview' ? 'Interview Scheduled' : candidate.status === 'screening' ? 'Screened' : candidate.status || 'New',
+                isPaused: Boolean(candidate.is_paused || candidate.is_muted || candidate.status === 'paused' || candidate.status === 'On Hold'),
                 recruiterNotes: candidate.recruiter_notes || '',
                 isAnonymizedView: false,
                 popiaConsent: {
@@ -1610,6 +1619,159 @@ export function App() {
   };
 
   // ============================================================
+  // DELETE CANDIDATE
+  // ============================================================
+
+  const handleDeleteCandidate = async (candidateId: string) => {
+    const targetCandidate = candidates.find(
+      (c) => c.id === candidateId || c.candidateId === candidateId
+    );
+    const candidateName = targetCandidate
+      ? `${targetCandidate.extractedData?.name || ''} ${targetCandidate.extractedData?.surname || ''}`.trim() || 'Candidate'
+      : candidateId;
+
+    // 1. Optimistic removal from local UI state
+    setCandidates((prev) =>
+      prev.filter((c) => c.id !== candidateId && c.candidateId !== candidateId)
+    );
+
+    // Update applicant counts on jobs
+    setJobs((prev) =>
+      prev.map((j) => ({
+        ...j,
+        applicantCount: candidates.filter(
+          (c) => c.jobId === j.id && c.id !== candidateId && c.candidateId !== candidateId
+        ).length,
+      }))
+    );
+
+    if (selectedCandidateModal?.id === candidateId || selectedCandidateModal?.candidateId === candidateId) {
+      setSelectedCandidateModal(null);
+    }
+
+    addAuditLog(
+      'Candidate Record Deleted',
+      `Permanently removed candidate profile "${candidateName}" from active database and recruitment pipeline.`,
+      candidateId,
+      'CANDIDATE_DELETED'
+    );
+
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const candidateUuid = nullableUuid(candidateId);
+      if (!candidateUuid) {
+        console.log('Candidate ID is not a database UUID; deleted from local state.');
+        return;
+      }
+
+      // Step 1: Clean up child dependencies in Supabase
+      try {
+        await supabase.from('interviews').delete().eq('candidate_id', candidateUuid);
+      } catch (fkErr) {
+        console.warn('Interviews cleanup notice for candidate:', fkErr);
+      }
+
+      try {
+        await supabase.from('screenings').delete().eq('candidate_id', candidateUuid);
+      } catch (fkErr) {
+        console.warn('Screenings cleanup notice for candidate:', fkErr);
+      }
+
+      // Step 2: Attempt direct hard delete on candidates table
+      const { data: deletedRows, error: deleteError } = await supabase
+        .from('candidates')
+        .delete()
+        .eq('id', candidateUuid)
+        .select();
+
+      const wasHardDeleted = !deleteError && Array.isArray(deletedRows) && deletedRows.length > 0;
+
+      if (!wasHardDeleted) {
+        console.warn(
+          'Notice: Supabase RLS blocked hard-delete on candidates. Marking status as "deleted" in Supabase table.',
+          deleteError
+        );
+
+        // Step 3: Fallback soft delete
+        await supabase
+          .from('candidates')
+          .update({
+            status: 'deleted',
+          })
+          .eq('id', candidateUuid);
+      } else {
+        console.log('Candidate permanently deleted from Supabase database table:', candidateId);
+      }
+    } catch (error) {
+      console.error('Supabase candidate delete error:', error);
+    }
+  };
+
+  // ============================================================
+  // TOGGLE MUTE / PAUSE CANDIDATE
+  // ============================================================
+
+  const handleToggleMuteCandidate = async (candidateId: string) => {
+    let isNowPaused = false;
+    setCandidates((prev) =>
+      prev.map((c) => {
+        if (c.id === candidateId || c.candidateId === candidateId) {
+          isNowPaused = !c.isPaused;
+          return {
+            ...c,
+            isPaused: isNowPaused,
+            status: isNowPaused ? 'On Hold' : (c.status === 'On Hold' ? 'Screened' : c.status),
+          };
+        }
+        return c;
+      })
+    );
+
+    if (selectedCandidateModal?.id === candidateId || selectedCandidateModal?.candidateId === candidateId) {
+      setSelectedCandidateModal((prev) =>
+        prev
+          ? {
+              ...prev,
+              isPaused: !prev.isPaused,
+              status: !prev.isPaused ? 'On Hold' : (prev.status === 'On Hold' ? 'Screened' : prev.status),
+            }
+          : null
+      );
+    }
+
+    const targetCandidate = candidates.find(
+      (c) => c.id === candidateId || c.candidateId === candidateId
+    );
+    const candidateName = targetCandidate
+      ? `${targetCandidate.extractedData?.name || ''} ${targetCandidate.extractedData?.surname || ''}`.trim() || 'Candidate'
+      : candidateId;
+
+    addAuditLog(
+      isNowPaused ? 'Candidate Profile Paused' : 'Candidate Profile Resumed',
+      `${isNowPaused ? 'Paused/Muted' : 'Resumed'} candidate profile "${candidateName}". Candidate remains saved in database.`,
+      candidateId,
+      'CANDIDATE_PAUSED'
+    );
+
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const candidateUuid = nullableUuid(candidateId);
+      if (!candidateUuid) return;
+
+      await supabase
+        .from('candidates')
+        .update({
+          status: isNowPaused ? 'paused' : 'screening',
+        })
+        .eq('id', candidateUuid);
+    } catch (error) {
+      console.error('Supabase candidate mute/pause toggle error:', error);
+    }
+  };
+
+  // ============================================================
   // EMAIL
   // ============================================================
 
@@ -2110,6 +2272,7 @@ export function App() {
           candidate={
             selectedCandidateModal
           }
+          jobs={jobs}
           onClose={() =>
             setSelectedCandidateModal(
               null
@@ -2117,6 +2280,12 @@ export function App() {
           }
           onUpdateStatus={
             handleUpdateCandidateStatus
+          }
+          onDeleteCandidate={
+            handleDeleteCandidate
+          }
+          onToggleMuteCandidate={
+            handleToggleMuteCandidate
           }
           isAnonymizedView={
             isAnonymizedView

@@ -140,6 +140,7 @@ export interface ApplicationRecord {
   risks: RiskConcern[];
   summary: ExecutiveSummary;
   status: ApplicationStatus;
+  isPaused?: boolean;
   recruiterNotes?: string;
   isAnonymizedView?: boolean;
   popiaConsent: {

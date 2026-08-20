@@ -30,49 +30,124 @@ app.get('/api/health', (req, res) => {
 // Step 3, 4, 5, 6, 7 AI Screening Endpoint
 app.post('/api/gemini/screen-candidate', async (req, res) => {
   try {
-    const { rawCvText, coverLetterText, jobProfile } = req.body;
+    const { rawCvText, coverLetterText, jobProfile, candidateProfile } = req.body;
 
-    if (!rawCvText || !jobProfile) {
-      return res.status(400).json({ error: 'Missing rawCvText or jobProfile' });
+    if ((!rawCvText && !candidateProfile) || !jobProfile) {
+      return res.status(400).json({ error: 'Missing candidate data or jobProfile' });
     }
 
     const ai = getGeminiClient();
 
-    const systemInstruction = `You are a Senior Enterprise AI Solutions Architect and HR Technology Consultant with 20 years of experience in recruitment systems and South African / Global HR technology.
-Your task is to analyze a candidate CV and cover letter against a Job Profile and return a structured JSON screening analysis.
+    const candidateExpYears = candidateProfile?.yearsExperience ?? candidateProfile?.totalYearsExperience;
+    const vacancyMinExpYears = jobProfile.minimumExperienceYears ?? 0;
+    const expDiff = (typeof candidateExpYears === 'number' && typeof vacancyMinExpYears === 'number') 
+      ? candidateExpYears - vacancyMinExpYears 
+      : null;
 
-CRITICAL INSTRUCTION:
-1. DO NOT use naive keyword matching. Use deep semantic reasoning.
-2. Understand synonyms and equivalent roles (e.g., Software Engineer = Backend Developer = Full Stack Developer).
-3. Recognize equivalent South African and international qualifications (e.g. BTech IT = BSc Computer Science = NQF Level 7).
-4. Evaluate salary alignment, notice periods, and career stability accurately.
-5. Identify explicit or hidden risks (e.g. employment gaps > 6 months, job hopping, missing core qualifications, relocation needs).
-6. Calculate scores strictly between 0 and 100 for each category.
-7. Return a clean JSON output matching the required format.`;
+    const systemInstruction = `You are a Senior Enterprise AI Solutions Architect and HR Technology Consultant with 20 years of experience in recruitment systems and South African / Global HR technology.
+Your task is to analyze the candidate application against the Job Profile and return a structured JSON screening analysis.
+
+CRITICAL INSTRUCTIONS ON CANDIDATE DATA INTEGRITY & EVIDENCE:
+1. Evaluate ONLY the supplied candidate profile data and CV text.
+2. DO NOT invent, hallucinate, or assume missing candidate information. If any information is unavailable, record it as "Not provided" or an empty list. Never manufacture years of experience, skills, qualifications, employment history, certifications, job titles, education, or achievements.
+3. The explicitly provided candidate profile (Name, Experience, Skills, Qualification, Salary, Location) represents the verified source of truth.
+4. EXPERIENCE ADVANTAGE EVALUATION:
+   - Vacancy Minimum Experience: ${vacancyMinExpYears} years.
+   - Candidate Experience: ${candidateExpYears !== undefined && candidateExpYears !== null ? `${candidateExpYears} years` : 'Extracted from CV / Not specified'}.
+   ${expDiff !== null && expDiff > 0 ? `- The candidate has an Experience Advantage of +${expDiff} years over the requirement. Treat this as a positive factor and key strength in candidate evaluation (while still evaluating required skills, qualifications, and role fit).` : ''}
+   ${expDiff !== null && expDiff < 0 ? `- The candidate has an experience deficit of ${Math.abs(expDiff)} years below the minimum requirement. Reflect this accurately in the evaluation and risk flags.` : ''}
+5. Calculate objective scores between 0 and 100 for each category based purely on actual evidence.
+6. Return a clean JSON output matching the requested schema.`;
+
+    const candidateDetailsText = candidateProfile ? `
+AUTHORITATIVE CANDIDATE PROFILE:
+- Full Name: ${candidateProfile.firstName || ''} ${candidateProfile.lastName || ''} ${candidateProfile.fullName || ''}`.trim() + `
+- Email: ${candidateProfile.email || 'Not provided'}
+- Phone: ${candidateProfile.phone || 'Not provided'}
+- Location: ${candidateProfile.location || 'Not provided'}
+- Qualification: ${candidateProfile.qualification || 'Not provided'}
+- Total Years Experience: ${candidateExpYears !== undefined && candidateExpYears !== null ? `${candidateExpYears} Years` : 'Not provided'}
+- Technical Skills: ${Array.isArray(candidateProfile.skills) ? candidateProfile.skills.join(', ') : candidateProfile.skills || 'Not provided'}
+- Notice Period: ${candidateProfile.noticePeriod || 'Not provided'}
+- Expected Salary: ${candidateProfile.expectedSalary || 'Not provided'}
+` : '';
 
     const prompt = `JOB PROFILE:
 Title: ${jobProfile.jobTitle}
 Company: ${jobProfile.company}
 Location: ${jobProfile.location}
-Salary Range: R${jobProfile.salaryMinZar.toLocaleString()} - R${jobProfile.salaryMaxZar.toLocaleString()} per annum
-Required Skills: ${jobProfile.requiredSkills.join(', ')}
-Preferred Skills: ${jobProfile.preferredSkills ? jobProfile.preferredSkills.join(', ') : 'None'}
-Min Experience Years: ${jobProfile.minimumExperienceYears}
-Qualifications Required: ${jobProfile.qualifications.join(', ')}
+Salary Range: R${(jobProfile.salaryMinZar || 0).toLocaleString()} - R${(jobProfile.salaryMaxZar || 0).toLocaleString()} per month
+Required Skills: ${Array.isArray(jobProfile.requiredSkills) ? jobProfile.requiredSkills.join(', ') : jobProfile.requiredSkills || 'None specified'}
+Preferred Skills: ${Array.isArray(jobProfile.preferredSkills) ? jobProfile.preferredSkills.join(', ') : 'None'}
+Min Experience Years Required: ${vacancyMinExpYears}
+Qualifications Required: ${Array.isArray(jobProfile.qualifications) ? jobProfile.qualifications.join(', ') : jobProfile.qualifications || 'Relevant qualification'}
 Description: ${jobProfile.jobDescription}
 
-CANDIDATE CV / RESUME TEXT:
-${rawCvText}
+${candidateDetailsText}
+
+RAW CV / RESUME TEXT:
+${rawCvText || 'No separate raw text provided. Refer to Authoritative Candidate Profile above.'}
 
 ${coverLetterText ? `COVER LETTER:\n${coverLetterText}` : ''}
 
-Evaluate this application completely and output JSON containing:
-1. extractedData: name, surname, email, phone, location, nationality, education (array of {degree, institution, fieldOfStudy, yearGraduated, nqfLevelEquivalent}), qualifications, certifications, workExperience (array of {title, company, durationMonths, startDate, endDate, keyResponsibilities, achievements}), technicalSkills, softSkills, languages, totalYearsExperience, currentEmployer, noticePeriodDays, expectedSalaryZar, availability, linkedInUrl, portfolioUrl, referencesCount
-2. scores: educationMatch, skillsMatch, experienceMatch, industryMatch, certificationMatch, leadershipExperience, communicationSkills, careerStability, employmentGapsScore, locationSuitability, salaryAlignment, availabilityScore, overallScore (all 0-100)
-3. category: 'Excellent Match' | 'Strong Match' | 'Suitable' | 'Potential' | 'Not Suitable'
-4. risks: array of {id, category, severity ('High'|'Medium'|'Low'), description, mitigationSuggestion}
-5. summary: {headline, experienceOverview, technicalAlignment, leadershipAndSoftSkills, salaryAndNoticeFit, keyConcerns (array of strings), overallRecommendation ('Strong Interview Candidate' | 'Suitable Candidate' | 'Potential Match - Further Info Needed' | 'Overbudget Candidate' | 'Not Recommended')}
-6. n8nPayload: object containing predictable n8n node outputs for step3_extraction, step4_scoring, step5_riskanalysis, step6_summary with fields status, timestamp, confidence, reasoning, recommendation, data.`;
+Evaluate this application strictly based on the supplied data and output JSON containing:
+1. extractedData: {
+     name: string,
+     surname: string,
+     email: string,
+     phone: string,
+     location: string,
+     nationality: string,
+     education: array of {degree, institution, fieldOfStudy, yearGraduated, nqfLevelEquivalent},
+     qualifications: array of strings,
+     certifications: array of strings,
+     workExperience: array of {title, company, durationMonths, startDate, endDate, keyResponsibilities, achievements},
+     technicalSkills: array of strings,
+     softSkills: array of strings,
+     languages: array of strings,
+     totalYearsExperience: number,
+     currentEmployer: string,
+     noticePeriodDays: number,
+     expectedSalaryZar: number,
+     availability: string,
+     linkedInUrl: string (or "Not provided"),
+     portfolioUrl: string (or "Not provided"),
+     referencesCount: number
+   }
+2. scores: {
+     educationMatch: number (0-100),
+     skillsMatch: number (0-100),
+     experienceMatch: number (0-100),
+     industryMatch: number (0-100),
+     certificationMatch: number (0-100),
+     leadershipExperience: number (0-100),
+     communicationSkills: number (0-100),
+     careerStability: number (0-100),
+     employmentGapsScore: number (0-100),
+     locationSuitability: number (0-100),
+     salaryAlignment: number (0-100),
+     availabilityScore: number (0-100),
+     overallScore: number (0-100)
+   }
+3. experienceAnalysis: {
+     requiredYears: number,
+     candidateYears: number,
+     experienceAdvantageYears: number (positive if candidate exceeds requirement, 0 if equal, negative if deficit),
+     hasAdvantage: boolean,
+     statement: string (e.g. "Experience requirement: 3 years | Candidate experience: 7 years | Experience advantage: +4 years")
+   }
+4. category: 'Excellent Match' | 'Strong Match' | 'Suitable' | 'Potential' | 'Not Suitable'
+5. risks: array of {id, category, severity ('High'|'Medium'|'Low'), description, mitigationSuggestion}
+6. summary: {
+     headline: string,
+     experienceOverview: string (include the experience advantage statement if candidate exceeds requirement),
+     technicalAlignment: string,
+     leadershipAndSoftSkills: string,
+     salaryAndNoticeFit: string,
+     keyConcerns: array of strings,
+     overallRecommendation: 'Strong Interview Candidate' | 'Suitable Candidate' | 'Potential Match - Further Info Needed' | 'Overbudget Candidate' | 'Not Recommended'
+   }
+7. n8nPayload: object containing predictable n8n node outputs for step3_extraction, step4_scoring, step5_riskanalysis, step6_summary with fields status, timestamp, confidence, reasoning, recommendation, data.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.6-flash',

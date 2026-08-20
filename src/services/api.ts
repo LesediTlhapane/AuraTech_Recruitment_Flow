@@ -17,29 +17,40 @@ export interface ScreenCandidateResponse {
 export async function screenCandidateWithAi(
   rawCvText: string,
   coverLetterText: string | undefined,
-  jobProfile: JobProfile
-): Promise<ScreenCandidateResponse> {
-  try {
-    const res = await fetch('/api/gemini/screen-candidate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rawCvText, coverLetterText, jobProfile }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.details || err.error || `HTTP ${res.status}`);
-    }
-
-    const data = await res.json();
-    if (data.success && data.result) {
-      return data.result;
-    }
-    throw new Error('Invalid AI response structure');
-  } catch (error) {
-    console.warn('Backend AI Screening failed, utilizing local fallback engine:', error);
-    return generateFallbackCandidateScreening(rawCvText, jobProfile);
+  jobProfile: JobProfile,
+  candidateProfile?: {
+    candidateId?: string;
+    firstName?: string;
+    lastName?: string;
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    location?: string;
+    qualification?: string;
+    yearsExperience?: number;
+    skills?: string[] | string;
+    noticePeriod?: string;
+    expectedSalary?: string;
   }
+): Promise<ScreenCandidateResponse> {
+  const res = await fetch('/api/gemini/screen-candidate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rawCvText, coverLetterText, jobProfile, candidateProfile }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const errorMessage = err.details || err.error || `HTTP ${res.status}: Failed to screen candidate with AI`;
+    console.error('[AI Screening Error]:', errorMessage);
+    throw new Error(errorMessage);
+  }
+
+  const data = await res.json();
+  if (data.success && data.result) {
+    return data.result;
+  }
+  throw new Error('Invalid response structure received from AI screening engine');
 }
 
 export async function generateEmailWithAi(

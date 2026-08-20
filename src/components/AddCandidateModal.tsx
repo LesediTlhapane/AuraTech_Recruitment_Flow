@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { JobProfile, ApplicationRecord, ApplicationSource } from '../types';
 import { screenCandidateWithAi, triggerN8nWebhook } from '../services/api';
-import { Sparkles, FileText, Upload, BrainCircuit, CheckCircle2, Paperclip, User, Mail, Phone, MapPin, GraduationCap, Briefcase, DollarSign, Clock, AlertCircle } from 'lucide-react';
+import { Sparkles, FileText, Upload, BrainCircuit, CheckCircle2, Paperclip, User, Mail, Phone, MapPin, GraduationCap, Briefcase, DollarSign, Clock, AlertCircle, AlertTriangle } from 'lucide-react';
 
 interface AddCandidateModalProps {
   jobs: JobProfile[];
@@ -38,6 +38,7 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
   const [isExtracting, setIsExtracting] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const sampleCvPresets = [
     {
@@ -134,44 +135,93 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
 
   const handleIngestAndScreen = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cvContentToProcess = rawCvText.trim() || `CANDIDATE: ${candidateName} ${candidateSurname}\nEMAIL: ${email}\nPHONE: ${phone}\nLOCATION: ${location}\nQUALIFICATION: ${qualification}\nEXPERIENCE: ${yearsExperience} Years\nSKILLS: ${skillsString}\nNOTICE: ${noticePeriod}\nSALARY: ${expectedSalary}`;
+    setErrorMessage(null);
 
     const targetJob = jobs.find((j) => j.id === selectedJobId) || jobs[0];
+    if (!targetJob) {
+      setErrorMessage('Please select a valid job vacancy to screen candidate against.');
+      return;
+    }
+
+    const candidateId = `cand-${Date.now()}`;
+    const trimmedFirstName = candidateName.trim();
+    const trimmedLastName = candidateSurname.trim();
+    const fullCandidateName = `${trimmedFirstName} ${trimmedLastName}`.trim() || 'Candidate';
+    const parsedSkills = skillsString
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const parsedExp = yearsExperience !== undefined && yearsExperience !== null && !isNaN(Number(yearsExperience))
+      ? Number(yearsExperience)
+      : undefined;
+
+    const authoritativeCandidateProfile = {
+      candidateId,
+      firstName: trimmedFirstName,
+      lastName: trimmedLastName,
+      fullName: fullCandidateName,
+      email: email.trim(),
+      phone: phone.trim(),
+      location: location.trim(),
+      qualification: qualification.trim(),
+      yearsExperience: parsedExp,
+      skills: parsedSkills,
+      noticePeriod: noticePeriod.trim(),
+      expectedSalary: expectedSalary.trim(),
+      rawCvText: rawCvText.trim() || undefined,
+      coverLetterText: coverLetterText.trim() || undefined,
+    };
+
+    // Logging around the screening request
+    console.log(`[Screening candidate]: ${candidateId}`);
+    console.log(`[Candidate name]: ${fullCandidateName}`);
+    console.log(`[Candidate experience]: ${parsedExp !== undefined ? `${parsedExp} years` : 'Not provided'}`);
+    console.log(`[Candidate skills]: ${parsedSkills.length > 0 ? parsedSkills.join(', ') : 'Not provided'}`);
+    console.log(`[Vacancy]: ${targetJob.id}`);
+    console.log(`[Job title]: ${targetJob.jobTitle}`);
+
+    const cvContentToProcess = rawCvText.trim() || `CANDIDATE: ${fullCandidateName}\nEMAIL: ${email}\nPHONE: ${phone}\nLOCATION: ${location}\nQUALIFICATION: ${qualification}\nEXPERIENCE: ${parsedExp ?? 'Not provided'} Years\nSKILLS: ${skillsString}\nNOTICE: ${noticePeriod}\nSALARY: ${expectedSalary}`;
 
     setIsProcessing(true);
     setProcessingStep(1); // Extracting Data
 
     try {
-      setTimeout(() => setProcessingStep(2), 800); // Scoring
-      setTimeout(() => setProcessingStep(3), 1600); // Risk Analysis
-      setTimeout(() => setProcessingStep(4), 2200); // Summary Generation
+      setTimeout(() => setProcessingStep(2), 700); // Scoring
+      setTimeout(() => setProcessingStep(3), 1400); // Risk Analysis
+      setTimeout(() => setProcessingStep(4), 2100); // Summary Generation
 
-      const aiResult = await screenCandidateWithAi(cvContentToProcess, coverLetterText, targetJob);
+      const aiResult = await screenCandidateWithAi(
+        cvContentToProcess,
+        coverLetterText.trim() || undefined,
+        targetJob,
+        authoritativeCandidateProfile
+      );
 
-      // Override AI extracted details with user refined detailed fields if provided
+      // Override AI extracted details with authoritative user entered fields
       const finalExtractedData = {
         ...aiResult.extractedData,
-        name: candidateName.trim() || aiResult.extractedData.name,
-        surname: candidateSurname.trim() || aiResult.extractedData.surname,
-        email: email.trim() || aiResult.extractedData.email,
-        phone: phone.trim() || aiResult.extractedData.phone,
-        location: location.trim() || aiResult.extractedData.location,
-        technicalSkills: skillsString.split(',').map(s => s.trim()).filter(Boolean),
-        totalYearsExperience: yearsExperience || aiResult.extractedData.totalYearsExperience,
-        noticePeriodDays: parseInt(noticePeriod) || aiResult.extractedData.noticePeriodDays || 30,
-        expectedSalaryZar: parseInt(expectedSalary.replace(/[^0-9]/g, '')) || aiResult.extractedData.expectedSalaryZar || 900000,
+        name: trimmedFirstName || aiResult.extractedData?.name || 'Applicant',
+        surname: trimmedLastName || aiResult.extractedData?.surname || '',
+        email: email.trim() || aiResult.extractedData?.email || '',
+        phone: phone.trim() || aiResult.extractedData?.phone || '',
+        location: location.trim() || aiResult.extractedData?.location || '',
+        qualifications: qualification.trim() ? [qualification.trim()] : (aiResult.extractedData?.qualifications || []),
+        technicalSkills: parsedSkills.length > 0 ? parsedSkills : (aiResult.extractedData?.technicalSkills || []),
+        totalYearsExperience: parsedExp !== undefined ? parsedExp : (aiResult.extractedData?.totalYearsExperience || 0),
+        noticePeriodDays: parseInt(noticePeriod) || aiResult.extractedData?.noticePeriodDays || 30,
+        expectedSalaryZar: parseInt(expectedSalary.replace(/[^0-9]/g, '')) || aiResult.extractedData?.expectedSalaryZar || 0,
       };
 
       const now = new Date().toISOString();
       const newRecord: ApplicationRecord = {
-        id: `cand-${Date.now()}`,
+        id: candidateId,
         jobId: targetJob.id,
         jobTitle: targetJob.jobTitle,
-        candidateId: `cand-${Date.now()}`,
+        candidateId,
         source,
         appliedDate: now,
         rawCvText: cvContentToProcess,
-        coverLetterText,
+        coverLetterText: coverLetterText.trim() || undefined,
         extractedData: finalExtractedData,
         scores: aiResult.scores,
         category: aiResult.category,
@@ -191,32 +241,66 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
       const webhookUrl = localStorage.getItem('aura_n8n_webhook_url') || defaultN8nUrl;
       const apiKeyHeader = localStorage.getItem('aura_n8n_api_key');
 
+      const n8nDispatchPayload = {
+        event: 'CANDIDATE_SCREENING_COMPLETED',
+        timestamp: now,
+        candidate_id: newRecord.id,
+        vacancy_id: targetJob.id,
+        candidate: {
+          id: newRecord.id,
+          name: `${finalExtractedData.name} ${finalExtractedData.surname}`.trim(),
+          firstName: finalExtractedData.name,
+          lastName: finalExtractedData.surname,
+          email: finalExtractedData.email,
+          phone: finalExtractedData.phone,
+          location: finalExtractedData.location,
+          yearsOfExperience: finalExtractedData.totalYearsExperience,
+          skills: finalExtractedData.technicalSkills,
+          qualifications: finalExtractedData.qualifications,
+          education: finalExtractedData.education,
+          workExperience: finalExtractedData.workExperience,
+          certifications: finalExtractedData.certifications,
+          noticePeriodDays: finalExtractedData.noticePeriodDays,
+          expectedSalaryZar: finalExtractedData.expectedSalaryZar,
+          rawCvText: cvContentToProcess,
+          coverLetterText: coverLetterText.trim() || undefined,
+          source,
+        },
+        vacancy: {
+          id: targetJob.id,
+          jobTitle: targetJob.jobTitle,
+          department: targetJob.department,
+          company: targetJob.company,
+          location: targetJob.location,
+          employmentType: targetJob.employmentType,
+          salaryMinZar: targetJob.salaryMinZar,
+          salaryMaxZar: targetJob.salaryMaxZar,
+          minimumExperienceYears: targetJob.minimumExperienceYears,
+          requiredSkills: targetJob.requiredSkills,
+          preferredSkills: targetJob.preferredSkills,
+          qualifications: targetJob.qualifications,
+          jobDescription: targetJob.jobDescription,
+        },
+        screening: {
+          overallScore: newRecord.scores.overallScore,
+          category: newRecord.category,
+          scores: newRecord.scores,
+          risks: newRecord.risks,
+          summary: newRecord.summary,
+        },
+        system: {
+          platform: 'Aura Recruitment Flow AI',
+          sourceSystem: 'Aura Enterprise Portal',
+        },
+      };
+
+      console.log('[n8n Screening Request Payload]:', n8nDispatchPayload);
+
       if (webhookUrl && webhookUrl.trim()) {
         const headers: Record<string, string> = {};
         if (apiKeyHeader && apiKeyHeader.trim()) {
           headers['X-N8N-API-KEY'] = apiKeyHeader.trim();
         }
-
-        const n8nDispatchPayload = {
-          event: 'CANDIDATE_INGESTION',
-          timestamp: new Date().toISOString(),
-          candidateId: newRecord.id,
-          candidateName: `${finalExtractedData.name} ${finalExtractedData.surname}`,
-          firstName: finalExtractedData.name,
-          lastName: finalExtractedData.surname,
-          email: finalExtractedData.email,
-          phone: finalExtractedData.phone,
-          jobTitle: targetJob.jobTitle,
-          overallScore: newRecord.scores.overallScore,
-          category: newRecord.category,
-          rawCvText: cvContentToProcess,
-          extractedData: finalExtractedData,
-          scores: newRecord.scores,
-          summary: newRecord.summary,
-          risks: newRecord.risks,
-          source,
-          candidateRecord: newRecord,
-        };
 
         try {
           const webhookResult = await triggerN8nWebhook(webhookUrl.trim(), n8nDispatchPayload, headers);
@@ -230,10 +314,11 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
         setIsProcessing(false);
         onAddCandidate(newRecord);
         onClose();
-      }, 2800);
-    } catch (err) {
-      console.error(err);
+      }, 2500);
+    } catch (err: any) {
+      console.error('[Candidate Ingestion & Screening Error]:', err);
       setIsProcessing(false);
+      setErrorMessage(err.message || 'Failed to screen candidate. Please check that input data is valid and try again.');
     }
   };
 
@@ -264,6 +349,23 @@ export const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
             &times;
           </button>
         </div>
+
+        {errorMessage && (
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-rose-800 animate-in fade-in">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <span className="font-bold block">Candidate Screening Failed</span>
+              <p className="mt-0.5 text-rose-700">{errorMessage}</p>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => setErrorMessage(null)} 
+              className="text-rose-500 hover:text-rose-800 font-bold ml-1"
+            >
+              &times;
+            </button>
+          </div>
+        )}
 
         {isProcessing ? (
           <div className="py-12 text-center space-y-6">
