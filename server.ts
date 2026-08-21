@@ -101,36 +101,78 @@ app.post('/api/gemini/extract-cv', async (req, res) => {
 
     const ai = getGeminiClient();
 
-    const systemInstruction = `You are a Senior Talent Acquisition & AI Extraction Specialist.
-Your task is to thoroughly analyze the provided CV / Resume document or text and extract clean, structured candidate details for recruitment profile auto-filling.
+    const systemInstruction = `You are a Senior Enterprise Talent Acquisition & AI Recruitment Extraction Specialist.
+Your task is to thoroughly analyze the provided CV / Resume document or text and extract rich, structured candidate details for professional recruitment profile auto-filling.
 
 CRITICAL EXTRACTION RULES:
-1. Extract the actual stated details with high accuracy.
-2. If a field cannot be determined, return an empty string "" or 0 for numeric fields. Do not guess or invent fake data.
-3. For names: Split full name into firstName/name and lastName/surname accurately.
-4. For skills: Extract a comprehensive list of technical tools, programming languages, methodologies, platforms, and industry domain skills.
-5. For experience: Extract the total years of professional experience as a number (e.g. 5, 7, 3.5). If not explicitly stated, calculate it from the work history duration.
-6. For qualifications: Extract the highest qualification/degree including institution and NQF level if applicable (e.g., "BSc Computer Science (University of Pretoria, NQF 7)").
-7. For notice period: Extract stated notice period (e.g., "30 Days", "Immediate", "60 Days", "Calendar Month"). Default to "30 Days" if standard.
-8. For expected/current salary: Extract salary if mentioned (e.g., "R950,000 / annum" or "R45,000 pm").
-9. For rawTextSummary: Provide a clean, structured plaintext summary of the candidate's CV.`;
+1. Extract the actual stated details with high fidelity and zero hallucination.
+2. If a field cannot be determined from the CV, return an empty string "" or 0 for numeric fields or empty array []. Never manufacture fake companies, schools, or credentials.
+3. For names: Accurately parse full name, first name, and surname.
+4. For skills: Split into comprehensive technical skills, soft skills, tools, and platforms.
+5. For experience: Calculate the total years of relevant professional experience accurately from the candidate's employment timeline. Include a clear one-sentence experienceCalculationAudit explaining how the duration was calculated.
+6. For education: Extract all degrees, diplomas, institutions, fields of study, graduation years, and NQF levels.
+7. For employment history: Extract structured work experience items with job title, company name, start date, end date (or "Present"), key responsibilities, and achievements.
+8. For certifications: Extract all professional certifications, licenses, and accreditations.
+9. For notice period: Extract notice period (e.g., "30 Days", "Immediate", "Calendar Month", "60 Days").
+10. For salary: Extract expected or current salary if present.`;
 
     const prompt = `Extract all candidate profile details from the attached CV (${fileName || 'Candidate Resume'}).
 Return a JSON object strictly matching this schema:
 {
   "name": "First Name (e.g. Liezel or Thabo)",
   "surname": "Last Name / Surname (e.g. van der Merwe or Nkosi)",
+  "fullName": "Full Name",
   "email": "candidate@example.com",
   "phone": "+27 82 123 4567",
   "location": "City, Province/Country (e.g. Pretoria East, Gauteng)",
-  "qualification": "Highest qualification and institution (e.g. BTech Information Technology - TUT)",
+  "province": "Province name if in South Africa (e.g. Gauteng, Western Cape)",
+  "city": "City name (e.g. Pretoria, Johannesburg, Cape Town)",
+  "currentRole": "Current or most recent job title (e.g. Senior Full Stack Engineer)",
+  "currentJobTitle": "Current or most recent job title",
+  "currentCompany": "Current or most recent employer company",
+  "professionalSummary": "Brief 2-3 sentence executive profile summary of the candidate",
+  "qualification": "Highest qualification and institution (e.g. BSc Computer Science - University of Pretoria)",
+  "qualifications": ["Qualification 1", "Qualification 2"],
   "yearsExperience": 7,
+  "experienceCalculationAudit": "e.g. 7 years total calculated from 2019-Present (4 yrs at Company A) + 2016-2019 (3 yrs at Company B)",
+  "technicalSkills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5"],
+  "softSkills": ["Problem Solving", "Stakeholder Communication", "Team Mentorship"],
+  "tools": ["Jira", "Git", "VS Code", "Postman", "Docker"],
+  "technologies": ["React", "TypeScript", "Node.js", "PostgreSQL", "AWS"],
+  "platforms": ["AWS", "Azure", "Linux"],
   "skills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5"],
-  "skillsString": "Comma-separated string of skills (e.g. Azure, Kubernetes, Docker, C#, .NET Core, Terraform)",
-  "noticePeriod": "Notice period (e.g. 30 Days or 60 Days or Immediate)",
-  "expectedSalary": "Expected salary string (e.g. R1,050,000 / annum)",
-  "currentRole": "Current or most recent job title",
-  "currentCompany": "Current or most recent company",
+  "skillsString": "Comma-separated string of top skills",
+  "education": [
+    {
+      "degree": "Degree / Diploma name (e.g. BSc in Computer Science)",
+      "institution": "University / College name (e.g. University of Pretoria)",
+      "fieldOfStudy": "Field of study (e.g. Computer Science & Software Engineering)",
+      "yearGraduated": 2018,
+      "nqfLevelEquivalent": "NQF 7"
+    }
+  ],
+  "certifications": ["AWS Certified Developer - Associate", "CKA Certified Kubernetes Administrator"],
+  "workExperience": [
+    {
+      "title": "Job Title (e.g. Senior Software Developer)",
+      "company": "Company Name (e.g. eStudy South Africa)",
+      "startDate": "2021",
+      "endDate": "Present",
+      "durationMonths": 36,
+      "keyResponsibilities": [
+        "Architected scalable microservices and web applications",
+        "Mentored junior engineers and conducted code reviews"
+      ],
+      "achievements": [
+        "Reduced API latency by 45% using Redis caching"
+      ],
+      "technologies": ["React", "Node.js", "TypeScript", "PostgreSQL"]
+    }
+  ],
+  "noticePeriod": "30 Days",
+  "noticePeriodDays": 30,
+  "expectedSalary": "e.g. R65,000 pm or R780,000 pa",
+  "expectedSalaryZar": 65000,
   "rawTextSummary": "Clean plaintext representation of the full CV"
 }`;
 
@@ -405,28 +447,65 @@ app.post('/api/gemini/analyze-job', async (req, res) => {
     const { rawJobText } = req.body;
     const ai = getGeminiClient();
 
-    const prompt = `Extract a structured enterprise Job Profile from this raw vacancy text:
+    const prompt = `You are a Senior Talent Acquisition Specialist and Enterprise Recruitment Architect.
+Extract a rich, structured enterprise Job Profile from this raw vacancy text or description:
 ${rawJobText}
 
-IMPORTANT SALARY RULES:
-- The salary MUST be extracted as MONTHLY ZAR values in salaryMinZar and salaryMaxZar (e.g. if text says "R20 000 per month" or "R20k pm", salaryMinZar is 20000).
-- If an annual salary is specified (e.g. "R600 000 per annum"), convert it to monthly by dividing by 12.
-- If only one monthly amount is stated (e.g. R20 000), set salaryMinZar to 20000 and salaryMaxZar to 25000 (or reasonable range).
+IMPORTANT SALARY & STRUCTURAL RULES:
+- The salary MUST be extracted as MONTHLY ZAR values in salaryMinZar and salaryMaxZar (e.g. if text says "R25 000 per month" or "R25k pm", salaryMinZar is 25000).
+- If an annual salary is specified (e.g. "R600 000 per annum"), convert it to monthly by dividing by 12 (e.g. 50000).
+- If only one monthly amount is stated (e.g. R35 000), set salaryMinZar to 35000 and salaryMaxZar to 42000 (or a reasonable 20% range).
+- Ensure separate requiredSkills vs preferredSkills arrays.
+- Extract structured responsibilities, minimum qualifications, field of study, certifications, and benefits.
 
 Return JSON strictly matching this schema:
 {
-  "jobTitle": "...",
-  "department": "...",
-  "company": "...",
-  "location": "...",
+  "jobTitle": "Job Title (e.g. Senior Full Stack Developer)",
+  "department": "Department (e.g. Information Technology)",
+  "company": "Company Name (e.g. eStudy South Africa or FinTech Dynamics)",
+  "industry": "Industry (e.g. Financial Technology / EdTech / E-Commerce)",
+  "location": "City, Province (e.g. Pretoria, Gauteng)",
+  "province": "Gauteng",
+  "city": "Pretoria",
+  "specificLocation": "Office park or specific area (e.g. Menlyn Maine or Sandton CBD)",
   "locationType": "On-Site" | "Remote" | "Hybrid",
-  "employmentType": "Full Time" | "Part Time" | "Contract",
-  "salaryMinZar": number (monthly salary in ZAR, e.g. 20000),
-  "salaryMaxZar": number (monthly salary in ZAR, e.g. 28000),
-  "requiredSkills": ["..."],
-  "preferredSkills": ["..."],
-  "minimumExperienceYears": number,
-  "qualifications": ["..."],
+  "workArrangement": "On-Site" | "Remote" | "Hybrid",
+  "employmentType": "Full Time" | "Part Time" | "Contract" | "Temporary" | "Internship" | "Graduate / Entry Level",
+  "salaryMinZar": 35000,
+  "salaryMaxZar": 50000,
+  "salaryMinMonthly": 35000,
+  "salaryMaxMonthly": 50000,
+  "requiredSkills": ["React", "TypeScript", "Node.js", "SQL", "Git"],
+  "preferredSkills": ["AWS", "Docker", "Next.js", "PostgreSQL"],
+  "minimumExperienceYears": 3,
+  "preferredExperienceYears": 5,
+  "experienceDescription": "3+ years professional experience developing full-stack web applications in enterprise environments.",
+  "qualifications": ["Bachelor's Degree in Computer Science or National Diploma (NQF 6/7)"],
+  "minimumQualification": "Bachelor's Degree (NQF 7)",
+  "fieldOfStudy": "Computer Science / Information Technology / Software Engineering",
+  "preferredQualification": "Honours Degree / Postgraduate Diploma (NQF 8)",
+  "certifications": ["AWS Certified Developer", "Azure Certified"],
+  "responsibilities": [
+    "Design and develop responsive, robust web applications",
+    "Collaborate with product designers and backend engineers",
+    "Write unit and integration tests to ensure software reliability"
+  ],
+  "essentialRequirements": [
+    "Demonstrated experience with React and modern TypeScript",
+    "Solid understanding of relational databases and RESTful API architecture"
+  ],
+  "preferredRequirements": [
+    "Experience with cloud deployments on AWS or Azure",
+    "Familiarity with Agile and Scrum development methodologies"
+  ],
+  "benefits": [
+    "Medical Aid Contribution",
+    "Retirement Fund",
+    "Annual Performance Bonus",
+    "Remote Work Option",
+    "Flexible Working Hours"
+  ],
+  "aboutRole": "Exciting opportunity to join a fast-growing team building modern digital platforms.",
   "jobDescription": "Full formatted job description text...",
   "closingDate": "YYYY-MM-DD"
 }`;

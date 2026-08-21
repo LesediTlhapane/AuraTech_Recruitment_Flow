@@ -1,6 +1,16 @@
 export type LocationType = 'On-Site' | 'Remote' | 'Hybrid';
 
-export type EmploymentType = 'Full Time' | 'Part Time' | 'Contract' | 'Full-time' | 'Part-time' | 'Hybrid' | 'Remote';
+export type EmploymentType = 
+  | 'Full Time' 
+  | 'Part Time' 
+  | 'Contract' 
+  | 'Temporary' 
+  | 'Internship' 
+  | 'Graduate / Entry Level'
+  | 'Full-time' 
+  | 'Part-time' 
+  | 'Hybrid' 
+  | 'Remote';
 
 export type VacancyStatus = 'Open' | 'Paused' | 'Closed' | 'Draft' | 'On Hold';
 
@@ -22,22 +32,44 @@ export type ApplicationStatus =
 export interface JobProfile {
   id: string;
   jobTitle: string;
+  title?: string; // Compatibility alias
   department: string;
   company: string;
+  industry?: string;
   location: string;
+  province?: string;
+  city?: string;
+  specificLocation?: string;
   locationType?: LocationType;
+  workArrangement?: LocationType;
   employmentType: EmploymentType;
   salaryMinZar: number; // Monthly salary in ZAR
   salaryMaxZar: number; // Monthly salary in ZAR
+  salaryMinMonthly?: number;
+  salaryMaxMonthly?: number;
+  salaryMinAnnual?: number;
+  salaryMaxAnnual?: number;
   requiredSkills: string[];
   preferredSkills: string[];
   minimumExperienceYears: number;
+  preferredExperienceYears?: number;
+  experienceDescription?: string;
   qualifications: string[]; // e.g. ["BSc Computer Science or equivalent NQF 7"]
+  minimumQualification?: string;
+  fieldOfStudy?: string;
+  preferredQualification?: string;
+  certifications?: string[];
+  responsibilities?: string[];
+  essentialRequirements?: string[];
+  preferredRequirements?: string[];
+  benefits?: string[];
+  aboutRole?: string;
   jobDescription: string;
   closingDate: string; // YYYY-MM-DD
   createdDate: string;
   status: VacancyStatus;
   applicantCount?: number;
+  jobRefNumber?: string;
 }
 
 export interface EducationItem {
@@ -56,14 +88,22 @@ export interface WorkExperienceItem {
   endDate: string; // or 'Present'
   keyResponsibilities: string[];
   achievements: string[];
+  technologies?: string[];
 }
 
 export interface ExtractedCandidateData {
   name: string;
   surname: string;
+  fullName?: string;
   email: string;
   phone: string;
   location: string;
+  province?: string;
+  city?: string;
+  currentJobTitle?: string;
+  currentRole?: string;
+  currentCompany?: string;
+  professionalSummary?: string;
   nationality: string;
   education: EducationItem[];
   qualifications: string[];
@@ -71,15 +111,23 @@ export interface ExtractedCandidateData {
   workExperience: WorkExperienceItem[];
   technicalSkills: string[];
   softSkills: string[];
+  tools?: string[];
+  technologies?: string[];
+  platforms?: string[];
   languages: string[];
   totalYearsExperience: number;
   currentEmployer: string;
+  previousEmployers?: string[];
   noticePeriodDays: number;
+  noticePeriod?: string;
   expectedSalaryZar: number;
+  expectedSalary?: string;
   availability: string;
   linkedInUrl?: string;
   portfolioUrl?: string;
   referencesCount: number;
+  rawTextSummary?: string;
+  experienceCalculationAudit?: string;
 }
 
 export interface ScoreCategoryBreakdown {
