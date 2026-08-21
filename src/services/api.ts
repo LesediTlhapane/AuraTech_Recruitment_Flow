@@ -319,149 +319,67 @@ export async function triggerN8nWebhook(
   }
 }
 
-// Fallback algorithm if server API is unreachable or key is missing
-function generateFallbackCandidateScreening(
-  rawCvText: string,
-  jobProfile: JobProfile
-): ScreenCandidateResponse {
-  const lines = rawCvText.split('\n').filter((l) => l.trim().length > 0);
-  const nameLine = lines[0] || 'Candidate Name';
-  const nameParts = nameLine.split(' ');
-  const firstName = nameParts[0] || 'Applicant';
-  const lastName = nameParts.slice(1).join(' ') || 'Candidate';
+export async function generateJobDescriptionWithAi(params: {
+  jobTitle: string;
+  department?: string;
+  company?: string;
+  industry?: string;
+  requiredSkills?: string[];
+  preferredSkills?: string[];
+  minimumExperienceYears?: number;
+  minimumQualification?: string;
+  workArrangement?: string;
+  employmentType?: string;
+  location?: string;
+  salaryMinMonthly?: number;
+  salaryMaxMonthly?: number;
+}): Promise<{
+  aboutRole?: string;
+  responsibilities?: string[];
+  essentialRequirements?: string[];
+  preferredRequirements?: string[];
+  experienceDescription?: string;
+  jobDescription?: string;
+}> {
+  const res = await fetch('/api/ai/generate-job-description', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
 
-  // Basic skill keyword presence check
-  const matchedSkills = jobProfile.requiredSkills.filter((s) =>
-    rawCvText.toLowerCase().includes(s.toLowerCase())
-  );
-  const skillsScore = Math.min(100, Math.round((matchedSkills.length / jobProfile.requiredSkills.length) * 85) + 15);
-
-  const overallScore = Math.round(skillsScore * 0.9);
-  let category: ScreenCandidateResponse['category'] = 'Suitable';
-  if (overallScore >= 90) category = 'Excellent Match';
-  else if (overallScore >= 80) category = 'Strong Match';
-  else if (overallScore >= 65) category = 'Suitable';
-  else if (overallScore >= 50) category = 'Potential';
-  else category = 'Not Suitable';
-
-  const extractedData: ExtractedCandidateData = {
-    name: firstName,
-    surname: lastName,
-    email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.co.za`,
-    phone: '+27 82 ' + Math.floor(1000000 + Math.random() * 9000000),
-    location: 'Gauteng, South Africa',
-    nationality: 'South African',
-    education: [
-      {
-        degree: 'Bachelor of Technology / Science',
-        institution: 'University of South Africa (UNISA)',
-        fieldOfStudy: 'Computer Science & Systems',
-        yearGraduated: 2018,
-        nqfLevelEquivalent: 'NQF Level 7',
-      },
-    ],
-    qualifications: ['Degree / Higher Diploma (NQF 7)'],
-    certifications: ['Certified Software Practitioner'],
-    workExperience: [
-      {
-        title: 'Senior Developer',
-        company: 'Enterprise Software Solutions',
-        durationMonths: 48,
-        startDate: '2020-01',
-        endDate: 'Present',
-        keyResponsibilities: ['Full-stack application development', 'API development'],
-        achievements: ['Delivered core platform features'],
-      },
-    ],
-    technicalSkills: matchedSkills.length > 0 ? matchedSkills : jobProfile.requiredSkills.slice(0, 3),
-    softSkills: ['Teamwork', 'Problem Solving', 'Communication'],
-    languages: ['English'],
-    totalYearsExperience: jobProfile.minimumExperienceYears + 1,
-    currentEmployer: 'Enterprise Tech SA',
-    noticePeriodDays: 30,
-    expectedSalaryZar: jobProfile.salaryMinZar + 50000,
-    availability: '30 Days Notice',
-    referencesCount: 2,
-  };
-
-  const scores: ScoreCategoryBreakdown = {
-    educationMatch: 85,
-    skillsMatch: skillsScore,
-    experienceMatch: 88,
-    industryMatch: 85,
-    certificationMatch: 80,
-    leadershipExperience: 75,
-    communicationSkills: 90,
-    careerStability: 85,
-    employmentGapsScore: 95,
-    locationSuitability: 90,
-    salaryAlignment: 90,
-    availabilityScore: 90,
-    overallScore,
-  };
-
-  const risks: RiskConcern[] = [];
-  if (skillsScore < 70) {
-    risks.push({
-      id: 'r-fallback-1',
-      category: 'Underqualified',
-      severity: 'Medium',
-      description: 'Missing 2 or more required skills outlined in Job Profile.',
-      mitigationSuggestion: 'Conduct technical assessment during preliminary round.',
-    });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.details || err.error || 'Failed to generate job description with AI');
   }
 
-  const summary: ExecutiveSummary = {
-    headline: `${category} with ${extractedData.totalYearsExperience} Years Experience`,
-    experienceOverview: `${firstName} demonstrates solid alignment with ${jobProfile.jobTitle} position.`,
-    technicalAlignment: `Matched skills: ${extractedData.technicalSkills.join(', ')}.`,
-    leadershipAndSoftSkills: 'Good communication and collaborative problem solving abilities.',
-    salaryAndNoticeFit: `Expected salary R${extractedData.expectedSalaryZar.toLocaleString()} aligns with budget.`,
-    keyConcerns: risks.map((r) => r.description),
-    overallRecommendation: overallScore >= 80 ? 'Strong Interview Candidate' : 'Suitable Candidate',
-  };
-
-  const now = new Date().toISOString();
-
-  return {
-    extractedData,
-    scores,
-    category,
-    risks,
-    summary,
-    n8nPayload: {
-      step3_extraction: {
-        status: 'SUCCESS',
-        timestamp: now,
-        confidence: 0.94,
-        reasoning: 'Extracted structured fields from CV text.',
-        recommendation: 'Proceed to scoring node.',
-        data: extractedData,
-      },
-      step4_scoring: {
-        status: 'SUCCESS',
-        timestamp: now,
-        confidence: 0.92,
-        reasoning: 'Calculated 12-factor evaluation score matrix against Job Profile.',
-        recommendation: 'Candidate categorized as ' + category,
-        data: scores,
-      },
-      step5_riskanalysis: {
-        status: risks.length > 0 ? 'WARNING' : 'SUCCESS',
-        timestamp: now,
-        confidence: 0.95,
-        reasoning: risks.length > 0 ? 'Potential risks identified' : 'Zero major risks detected.',
-        recommendation: risks.length > 0 ? 'Review flagged risk items' : 'Low risk candidate.',
-        data: risks,
-      },
-      step6_summary: {
-        status: 'SUCCESS',
-        timestamp: now,
-        confidence: 0.96,
-        reasoning: 'Generated executive candidate summary and recommendation.',
-        recommendation: summary.overallRecommendation,
-        data: summary,
-      },
-    },
-  };
+  const data = await res.json();
+  return data.data || {};
 }
+
+export async function getJobSuggestionsWithAi(params: {
+  jobTitle: string;
+  department?: string;
+}): Promise<{
+  suggestedSkills?: string[];
+  preferredSkills?: string[];
+  suggestedQualifications?: string[];
+  suggestedCertifications?: string[];
+  suggestedExperienceYears?: number;
+  suggestedResponsibilities?: string[];
+  suggestedBenefits?: string[];
+}> {
+  const res = await fetch('/api/ai/job-suggestions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.details || err.error || 'Failed to fetch job suggestions with AI');
+  }
+
+  const data = await res.json();
+  return data.data || {};
+}
+

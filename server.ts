@@ -1,9 +1,9 @@
 import express from 'express';
 import path from 'path';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import mammoth from 'mammoth';
-import * as pdfParseModule from 'pdf-parse';
-const pdfParse: any = (pdfParseModule as any).default || pdfParseModule;
+import * as pdfParseNamespace from 'pdf-parse';
+const pdfParse: any = (pdfParseNamespace as any).default || (pdfParseNamespace as any).pdfParse || pdfParseNamespace;
 
 const app = express();
 app.use(express.json({ limit: '25mb' }));
@@ -30,8 +30,10 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// AI CV Auto-Extraction Endpoint
-app.post('/api/gemini/extract-cv', async (req, res) => {
+// ============================================================================
+// 1. AI CANDIDATE / CV EXTRACTION ENDPOINT
+// ============================================================================
+async function handleExtractCv(req: express.Request, res: express.Response) {
   try {
     const { rawCvText, fileBase64, mimeType, fileName } = req.body;
 
@@ -74,13 +76,16 @@ app.post('/api/gemini/extract-cv', async (req, res) => {
           effectiveMime.includes('pdf')
         ) {
           try {
-            const pdfData = await (pdfParse as any)(fileBuffer);
-            if (pdfData && pdfData.text && pdfData.text.trim().length > 0) {
-              parsedDocumentText = pdfData.text.trim();
-              console.log(`[CV Extractor] Successfully extracted ${parsedDocumentText.length} chars from PDF: ${fileName}`);
+            const parserFn = typeof pdfParse === 'function' ? pdfParse : (pdfParse as any)?.default;
+            if (typeof parserFn === 'function') {
+              const pdfData = await parserFn(fileBuffer);
+              if (pdfData && pdfData.text && pdfData.text.trim().length > 0) {
+                parsedDocumentText = pdfData.text.trim();
+                console.log(`[CV Extractor] Successfully extracted ${parsedDocumentText.length} chars from PDF: ${fileName}`);
+              }
             }
           } catch (pdfErr) {
-            console.warn('[CV Extractor] pdf-parse warning (will use multimodal PDF fallback):', pdfErr);
+            console.log('[CV Extractor] Using native multimodal PDF processing for Gemini model.');
           }
         }
 
@@ -101,88 +106,79 @@ app.post('/api/gemini/extract-cv', async (req, res) => {
 
     const ai = getGeminiClient();
 
-    const systemInstruction = `You are a Senior Enterprise Talent Acquisition & AI Recruitment Extraction Specialist.
-Your task is to thoroughly analyze the provided CV / Resume document or text and extract rich, structured candidate details for professional recruitment profile auto-filling.
+    const systemInstruction = `You are a Senior Talent Acquisition Specialist and AI Recruitment Data Extraction Engine.
+Your task is to extract structured, accurate candidate details from the provided CV / Resume with 100% fidelity.
 
-CRITICAL EXTRACTION RULES:
-1. Extract the actual stated details with high fidelity and zero hallucination.
-2. If a field cannot be determined from the CV, return an empty string "" or 0 for numeric fields or empty array []. Never manufacture fake companies, schools, or credentials.
-3. For names: Accurately parse full name, first name, and surname.
-4. For skills: Split into comprehensive technical skills, soft skills, tools, and platforms.
-5. For experience: Calculate the total years of relevant professional experience accurately from the candidate's employment timeline. Include a clear one-sentence experienceCalculationAudit explaining how the duration was calculated.
-6. For education: Extract all degrees, diplomas, institutions, fields of study, graduation years, and NQF levels.
-7. For employment history: Extract structured work experience items with job title, company name, start date, end date (or "Present"), key responsibilities, and achievements.
-8. For certifications: Extract all professional certifications, licenses, and accreditations.
-9. For notice period: Extract notice period (e.g., "30 Days", "Immediate", "Calendar Month", "60 Days").
-10. For salary: Extract expected or current salary if present.`;
+STRICT ZERO-HALLUCINATION EXTRACTION RULES:
+1. Extract ONLY the information that is explicitly stated in the document or text.
+2. If any field (such as email, phone, location, qualification, salary, or notice period) is NOT in the CV, set it to "" (empty string) or [] (empty array) or 0 (for numbers). NEVER invent fake names, universities, companies, dates, or contact info.
+3. Calculate the total years of relevant professional experience accurately from the candidate's career timeline.
+4. Separate technical skills, soft skills, tools, and platforms into clean arrays.
+5. Extract all education records with degree, institution, field of study, graduation year, and NQF level if applicable.
+6. Extract all employment history items with title, company, dates, key responsibilities, and achievements.
+7. Return a strictly valid JSON object.`;
 
-    const prompt = `Extract all candidate profile details from the attached CV (${fileName || 'Candidate Resume'}).
+    const prompt = `Extract all candidate profile details from this CV document (${fileName || 'Candidate Resume'}).
 Return a JSON object strictly matching this schema:
 {
-  "name": "First Name (e.g. Liezel or Thabo)",
-  "surname": "Last Name / Surname (e.g. van der Merwe or Nkosi)",
+  "name": "First Name (e.g. John or Thabo)",
+  "surname": "Last Name / Surname (e.g. Smith or Nkosi)",
   "fullName": "Full Name",
-  "email": "candidate@example.com",
-  "phone": "+27 82 123 4567",
-  "location": "City, Province/Country (e.g. Pretoria East, Gauteng)",
-  "province": "Province name if in South Africa (e.g. Gauteng, Western Cape)",
-  "city": "City name (e.g. Pretoria, Johannesburg, Cape Town)",
-  "currentRole": "Current or most recent job title (e.g. Senior Full Stack Engineer)",
+  "email": "candidate email or empty string if not found",
+  "phone": "candidate phone or empty string if not found",
+  "location": "City, Province / Country or empty string if not found",
+  "province": "Province name if in South Africa, otherwise empty string",
+  "city": "City name if specified, otherwise empty string",
+  "currentRole": "Current or most recent job title",
   "currentJobTitle": "Current or most recent job title",
   "currentCompany": "Current or most recent employer company",
-  "professionalSummary": "Brief 2-3 sentence executive profile summary of the candidate",
+  "professionalSummary": "Brief summary of candidate background based strictly on CV",
   "qualification": "Highest qualification and institution (e.g. BSc Computer Science - University of Pretoria)",
   "qualifications": ["Qualification 1", "Qualification 2"],
-  "yearsExperience": 7,
-  "experienceCalculationAudit": "e.g. 7 years total calculated from 2019-Present (4 yrs at Company A) + 2016-2019 (3 yrs at Company B)",
-  "technicalSkills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5"],
-  "softSkills": ["Problem Solving", "Stakeholder Communication", "Team Mentorship"],
-  "tools": ["Jira", "Git", "VS Code", "Postman", "Docker"],
-  "technologies": ["React", "TypeScript", "Node.js", "PostgreSQL", "AWS"],
-  "platforms": ["AWS", "Azure", "Linux"],
-  "skills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5"],
+  "yearsExperience": 5,
+  "experienceCalculationAudit": "Explanation of how total experience years was calculated from employment timeline",
+  "technicalSkills": ["Skill 1", "Skill 2", "Skill 3"],
+  "softSkills": ["Soft skill 1", "Soft skill 2"],
+  "tools": ["Tool 1", "Tool 2"],
+  "technologies": ["Tech 1", "Tech 2"],
+  "platforms": ["Platform 1"],
+  "skills": ["Skill 1", "Skill 2", "Skill 3"],
   "skillsString": "Comma-separated string of top skills",
   "education": [
     {
-      "degree": "Degree / Diploma name (e.g. BSc in Computer Science)",
-      "institution": "University / College name (e.g. University of Pretoria)",
-      "fieldOfStudy": "Field of study (e.g. Computer Science & Software Engineering)",
-      "yearGraduated": 2018,
+      "degree": "Degree or Diploma name",
+      "institution": "University / College name",
+      "fieldOfStudy": "Field of study",
+      "yearGraduated": 2020,
       "nqfLevelEquivalent": "NQF 7"
     }
   ],
-  "certifications": ["AWS Certified Developer - Associate", "CKA Certified Kubernetes Administrator"],
+  "certifications": ["Certification name"],
   "workExperience": [
     {
-      "title": "Job Title (e.g. Senior Software Developer)",
-      "company": "Company Name (e.g. eStudy South Africa)",
+      "title": "Job Title",
+      "company": "Company Name",
       "startDate": "2021",
       "endDate": "Present",
       "durationMonths": 36,
-      "keyResponsibilities": [
-        "Architected scalable microservices and web applications",
-        "Mentored junior engineers and conducted code reviews"
-      ],
-      "achievements": [
-        "Reduced API latency by 45% using Redis caching"
-      ],
-      "technologies": ["React", "Node.js", "TypeScript", "PostgreSQL"]
+      "keyResponsibilities": ["Responsibility 1", "Responsibility 2"],
+      "achievements": ["Achievement 1"],
+      "technologies": ["Tech 1", "Tech 2"]
     }
   ],
-  "noticePeriod": "30 Days",
+  "noticePeriod": "Notice period (e.g. 30 Days, Immediate) or empty string",
   "noticePeriodDays": 30,
-  "expectedSalary": "e.g. R65,000 pm or R780,000 pa",
-  "expectedSalaryZar": 65000,
-  "rawTextSummary": "Clean plaintext representation of the full CV"
+  "expectedSalary": "Expected or current salary or empty string",
+  "expectedSalaryZar": 0,
+  "rawTextSummary": "Full text or summary of CV"
 }`;
 
     const contents: any[] = [];
 
-    // If PDF or Image, and we have the clean base64, also pass as inlineData
     if (fileBase64 && mimeType) {
       const cleanBase64 = fileBase64.includes('base64,') ? fileBase64.split('base64,')[1] : fileBase64;
       const lowerFileName = (fileName || '').toLowerCase();
-      
+
       if (mimeType.includes('pdf') || lowerFileName.endsWith('.pdf')) {
         contents.push({
           inlineData: {
@@ -211,7 +207,7 @@ Return a JSON object strictly matching this schema:
     });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.6-flash',
       contents,
       config: {
         systemInstruction,
@@ -230,7 +226,6 @@ Return a JSON object strictly matching this schema:
       }
     }
 
-    // Ensure rawTextSummary has readable text if empty
     if (!extractedData.rawTextSummary && parsedDocumentText) {
       extractedData.rawTextSummary = parsedDocumentText;
     }
@@ -240,16 +235,21 @@ Return a JSON object strictly matching this schema:
       data: extractedData,
     });
   } catch (error: any) {
-    console.error('Error in /api/gemini/extract-cv:', error);
+    console.error('Error in handleExtractCv:', error);
     return res.status(500).json({
       error: 'Failed to extract CV details',
       details: error.message || String(error),
     });
   }
-});
+}
 
-// Step 3, 4, 5, 6, 7 AI Screening Endpoint
-app.post('/api/gemini/screen-candidate', async (req, res) => {
+app.post('/api/ai/extract-candidate', handleExtractCv);
+app.post('/api/gemini/extract-cv', handleExtractCv);
+
+// ============================================================================
+// 2. AI CANDIDATE SCREENING & REASONING ENGINE
+// ============================================================================
+async function handleScreenCandidate(req: express.Request, res: express.Response) {
   try {
     const { rawCvText, coverLetterText, jobProfile, candidateProfile } = req.body;
 
@@ -261,28 +261,31 @@ app.post('/api/gemini/screen-candidate', async (req, res) => {
 
     const candidateExpYears = candidateProfile?.yearsExperience ?? candidateProfile?.totalYearsExperience;
     const vacancyMinExpYears = jobProfile.minimumExperienceYears ?? 0;
-    const expDiff = (typeof candidateExpYears === 'number' && typeof vacancyMinExpYears === 'number') 
-      ? candidateExpYears - vacancyMinExpYears 
+    const expDiff = (typeof candidateExpYears === 'number' && typeof vacancyMinExpYears === 'number')
+      ? candidateExpYears - vacancyMinExpYears
       : null;
 
-    const systemInstruction = `You are a Senior Enterprise AI Solutions Architect and HR Technology Consultant with 20 years of experience in recruitment systems and South African / Global HR technology.
-Your task is to analyze the candidate application against the Job Profile and return a structured JSON screening analysis.
+    const candidateName = candidateProfile?.fullName || 
+      `${candidateProfile?.firstName || ''} ${candidateProfile?.lastName || ''}`.trim() || 
+      'Candidate';
 
-CRITICAL INSTRUCTIONS ON CANDIDATE DATA INTEGRITY & EVIDENCE:
-1. Evaluate ONLY the supplied candidate profile data and CV text.
-2. DO NOT invent, hallucinate, or assume missing candidate information. If any information is unavailable, record it as "Not provided" or an empty list. Never manufacture years of experience, skills, qualifications, employment history, certifications, job titles, education, or achievements.
-3. The explicitly provided candidate profile (Name, Experience, Skills, Qualification, Salary, Location) represents the verified source of truth.
-4. EXPERIENCE ADVANTAGE EVALUATION:
-   - Vacancy Minimum Experience: ${vacancyMinExpYears} years.
-   - Candidate Experience: ${candidateExpYears !== undefined && candidateExpYears !== null ? `${candidateExpYears} years` : 'Extracted from CV / Not specified'}.
-   ${expDiff !== null && expDiff > 0 ? `- The candidate has an Experience Advantage of +${expDiff} years over the requirement. Treat this as a positive factor and key strength in candidate evaluation (while still evaluating required skills, qualifications, and role fit).` : ''}
-   ${expDiff !== null && expDiff < 0 ? `- The candidate has an experience deficit of ${Math.abs(expDiff)} years below the minimum requirement. Reflect this accurately in the evaluation and risk flags.` : ''}
-5. Calculate objective scores between 0 and 100 for each category based purely on actual evidence.
-6. Return a clean JSON output matching the requested schema.`;
+    const systemInstruction = `You are a Senior Talent Acquisition Specialist and Principal HR Recruitment Architect.
+You are evaluating a candidate application against an enterprise Job Profile.
+
+ABSOLUTE SOURCE-OF-TRUTH RULES:
+1. The supplied candidate profile and CV text are the sole sources of truth.
+2. DO NOT invent, assume, or hallucinate qualifications, skills, companies, or experience not present in the record. If missing, record "Not provided" or empty arrays.
+3. EXPERIENCE ADVANTAGE EVALUATION:
+   - Job Vacancy Minimum Experience Required: ${vacancyMinExpYears} years.
+   - Candidate Actual Experience: ${candidateExpYears !== undefined && candidateExpYears !== null ? `${candidateExpYears} years` : 'Determined from CV'}.
+   ${expDiff !== null && expDiff > 0 ? `- EXPERIENCE ADVANTAGE: The candidate exceeds the minimum experience requirement by ${expDiff} years (${candidateExpYears} years vs required ${vacancyMinExpYears} years). Positively award high experienceMatch score and highlight "Experience Advantage: Candidate exceeds the minimum experience requirement by ${expDiff} years" in the summary.` : ''}
+   ${expDiff !== null && expDiff < 0 ? `- EXPERIENCE DEFICIT: The candidate has ${Math.abs(expDiff)} years less than the required ${vacancyMinExpYears} years. Factor this into experienceMatch and add a note in risks.` : ''}
+4. Objective Scoring: Score each of the 12 evaluation metrics from 0 to 100 based strictly on verified evidence.
+5. Return a strict JSON response.`;
 
     const candidateDetailsText = candidateProfile ? `
-AUTHORITATIVE CANDIDATE PROFILE:
-- Full Name: ${candidateProfile.firstName || ''} ${candidateProfile.lastName || ''} ${candidateProfile.fullName || ''}`.trim() + `
+AUTHORITATIVE CANDIDATE PROFILE (DATABASE RECORD):
+- Full Name: ${candidateName}
 - Email: ${candidateProfile.email || 'Not provided'}
 - Phone: ${candidateProfile.phone || 'Not provided'}
 - Location: ${candidateProfile.location || 'Not provided'}
@@ -293,16 +296,17 @@ AUTHORITATIVE CANDIDATE PROFILE:
 - Expected Salary: ${candidateProfile.expectedSalary || 'Not provided'}
 ` : '';
 
-    const prompt = `JOB PROFILE:
+    const prompt = `JOB VACANCY PROFILE:
 Title: ${jobProfile.jobTitle}
 Company: ${jobProfile.company}
-Location: ${jobProfile.location}
+Department: ${jobProfile.department || 'General'}
+Location: ${jobProfile.location} (${jobProfile.locationType || 'Hybrid'})
 Salary Range: R${(jobProfile.salaryMinZar || 0).toLocaleString()} - R${(jobProfile.salaryMaxZar || 0).toLocaleString()} per month
 Required Skills: ${Array.isArray(jobProfile.requiredSkills) ? jobProfile.requiredSkills.join(', ') : jobProfile.requiredSkills || 'None specified'}
 Preferred Skills: ${Array.isArray(jobProfile.preferredSkills) ? jobProfile.preferredSkills.join(', ') : 'None'}
-Min Experience Years Required: ${vacancyMinExpYears}
+Minimum Experience Years Required: ${vacancyMinExpYears}
 Qualifications Required: ${Array.isArray(jobProfile.qualifications) ? jobProfile.qualifications.join(', ') : jobProfile.qualifications || 'Relevant qualification'}
-Description: ${jobProfile.jobDescription}
+Job Description: ${jobProfile.jobDescription || jobProfile.aboutRole || 'Standard vacancy'}
 
 ${candidateDetailsText}
 
@@ -311,64 +315,64 @@ ${rawCvText || 'No separate raw text provided. Refer to Authoritative Candidate 
 
 ${coverLetterText ? `COVER LETTER:\n${coverLetterText}` : ''}
 
-Evaluate this application strictly based on the supplied data and output JSON containing:
-1. extractedData: {
-     name: string,
-     surname: string,
-     email: string,
-     phone: string,
-     location: string,
-     nationality: string,
-     education: array of {degree, institution, fieldOfStudy, yearGraduated, nqfLevelEquivalent},
-     qualifications: array of strings,
-     certifications: array of strings,
-     workExperience: array of {title, company, durationMonths, startDate, endDate, keyResponsibilities, achievements},
-     technicalSkills: array of strings,
-     softSkills: array of strings,
-     languages: array of strings,
-     totalYearsExperience: number,
-     currentEmployer: string,
-     noticePeriodDays: number,
-     expectedSalaryZar: number,
-     availability: string,
-     linkedInUrl: string (or "Not provided"),
-     portfolioUrl: string (or "Not provided"),
-     referencesCount: number
+Evaluate this candidate against the vacancy and return a JSON object with:
+1. "extractedData": {
+     "name": string,
+     "surname": string,
+     "email": string,
+     "phone": string,
+     "location": string,
+     "nationality": string,
+     "education": array of { "degree", "institution", "fieldOfStudy", "yearGraduated", "nqfLevelEquivalent" },
+     "qualifications": array of strings,
+     "certifications": array of strings,
+     "workExperience": array of { "title", "company", "durationMonths", "startDate", "endDate", "keyResponsibilities", "achievements" },
+     "technicalSkills": array of strings,
+     "softSkills": array of strings,
+     "languages": array of strings,
+     "totalYearsExperience": number,
+     "currentEmployer": string,
+     "noticePeriodDays": number,
+     "expectedSalaryZar": number,
+     "availability": string,
+     "linkedInUrl": string,
+     "portfolioUrl": string,
+     "referencesCount": number
    }
-2. scores: {
-     educationMatch: number (0-100),
-     skillsMatch: number (0-100),
-     experienceMatch: number (0-100),
-     industryMatch: number (0-100),
-     certificationMatch: number (0-100),
-     leadershipExperience: number (0-100),
-     communicationSkills: number (0-100),
-     careerStability: number (0-100),
-     employmentGapsScore: number (0-100),
-     locationSuitability: number (0-100),
-     salaryAlignment: number (0-100),
-     availabilityScore: number (0-100),
-     overallScore: number (0-100)
+2. "scores": {
+     "educationMatch": number (0-100),
+     "skillsMatch": number (0-100),
+     "experienceMatch": number (0-100),
+     "industryMatch": number (0-100),
+     "certificationMatch": number (0-100),
+     "leadershipExperience": number (0-100),
+     "communicationSkills": number (0-100),
+     "careerStability": number (0-100),
+     "employmentGapsScore": number (0-100),
+     "locationSuitability": number (0-100),
+     "salaryAlignment": number (0-100),
+     "availabilityScore": number (0-100),
+     "overallScore": number (0-100)
    }
-3. experienceAnalysis: {
-     requiredYears: number,
-     candidateYears: number,
-     experienceAdvantageYears: number (positive if candidate exceeds requirement, 0 if equal, negative if deficit),
-     hasAdvantage: boolean,
-     statement: string (e.g. "Experience requirement: 3 years | Candidate experience: 7 years | Experience advantage: +4 years")
+3. "experienceAnalysis": {
+     "requiredYears": number,
+     "candidateYears": number,
+     "experienceAdvantageYears": number,
+     "hasAdvantage": boolean,
+     "statement": string
    }
-4. category: 'Excellent Match' | 'Strong Match' | 'Suitable' | 'Potential' | 'Not Suitable'
-5. risks: array of {id, category, severity ('High'|'Medium'|'Low'), description, mitigationSuggestion}
-6. summary: {
-     headline: string,
-     experienceOverview: string (include the experience advantage statement if candidate exceeds requirement),
-     technicalAlignment: string,
-     leadershipAndSoftSkills: string,
-     salaryAndNoticeFit: string,
-     keyConcerns: array of strings,
-     overallRecommendation: 'Strong Interview Candidate' | 'Suitable Candidate' | 'Potential Match - Further Info Needed' | 'Overbudget Candidate' | 'Not Recommended'
+4. "category": "Excellent Match" | "Strong Match" | "Suitable" | "Potential" | "Not Suitable"
+5. "risks": array of { "id": string, "category": string, "severity": "High"|"Medium"|"Low", "description": string, "mitigationSuggestion": string }
+6. "summary": {
+     "headline": string,
+     "experienceOverview": string,
+     "technicalAlignment": string,
+     "leadershipAndSoftSkills": string,
+     "salaryAndNoticeFit": string,
+     "keyConcerns": array of strings,
+     "overallRecommendation": "Strong Interview Candidate" | "Suitable Candidate" | "Potential Match - Further Info Needed" | "Overbudget Candidate" | "Not Recommended"
    }
-7. n8nPayload: object containing predictable n8n node outputs for step3_extraction, step4_scoring, step5_riskanalysis, step6_summary with fields status, timestamp, confidence, reasoning, recommendation, data.`;
+7. "n8nPayload": structured object summarizing each step with timestamp and status for data export`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.6-flash',
@@ -380,7 +384,15 @@ Evaluate this application strictly based on the supplied data and output JSON co
     });
 
     const responseText = response.text || '{}';
-    const parsedData = JSON.parse(responseText);
+    let parsedData: any = {};
+    try {
+      parsedData = JSON.parse(responseText);
+    } catch {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsedData = JSON.parse(jsonMatch[0]);
+      }
+    }
 
     return res.json({
       success: true,
@@ -388,41 +400,79 @@ Evaluate this application strictly based on the supplied data and output JSON co
       result: parsedData,
     });
   } catch (error: any) {
-    console.error('Error in /api/gemini/screen-candidate:', error);
+    console.error('Error in handleScreenCandidate:', error);
     return res.status(500).json({
       error: 'Failed to process candidate screening',
       details: error.message || String(error),
     });
   }
-});
+}
 
-// Step 8 AI Email Generator Endpoint
-app.post('/api/gemini/generate-email', async (req, res) => {
+app.post('/api/ai/screen-candidate', handleScreenCandidate);
+app.post('/api/gemini/screen-candidate', handleScreenCandidate);
+
+// ============================================================================
+// 3. AI JOB DESCRIPTION & SPECIFICATION GENERATOR
+// ============================================================================
+async function handleGenerateJobDescription(req: express.Request, res: express.Response) {
   try {
-    const { candidateName, jobTitle, companyName, emailType, customNotes } = req.body;
+    const {
+      jobTitle,
+      department,
+      company,
+      industry,
+      requiredSkills,
+      preferredSkills,
+      minimumExperienceYears,
+      minimumQualification,
+      workArrangement,
+      employmentType,
+      location,
+      salaryMinMonthly,
+      salaryMaxMonthly,
+    } = req.body;
+
+    if (!jobTitle) {
+      return res.status(400).json({ error: 'Job title is required.' });
+    }
 
     const ai = getGeminiClient();
 
-    const prompt = `Write a highly professional, friendly, and personalized email for a recruitment process.
-Candidate Name: ${candidateName}
-Job Title: ${jobTitle}
-Company: ${companyName || 'TalentFlow Enterprise'}
-Email Type: ${emailType}
-Additional Recruiter Context: ${customNotes || 'Standard recruitment template'}
+    const prompt = `You are a Principal Talent Acquisition Architect.
+Generate a structured, high-quality, professional job description and vacancy specification for:
+- Job Title: ${jobTitle}
+- Department: ${department || 'General'}
+- Company: ${company || 'Aura Tech Enterprise'}
+- Industry: ${industry || 'Technology / Professional Services'}
+- Location: ${location || 'South Africa'} (${workArrangement || 'Hybrid'})
+- Employment Type: ${employmentType || 'Full Time'}
+- Minimum Experience: ${minimumExperienceYears || 2} years
+- Minimum Qualification: ${minimumQualification || "Bachelor's Degree or Equivalent"}
+- Required Skills: ${Array.isArray(requiredSkills) ? requiredSkills.join(', ') : requiredSkills || 'Key domain skills'}
+- Preferred Skills: ${Array.isArray(preferredSkills) ? preferredSkills.join(', ') : preferredSkills || 'Supplementary skills'}
+- Salary Range: R${salaryMinMonthly || 25000} - R${salaryMaxMonthly || 40000} per month
 
-Email Types include:
-- 'Acknowledgement': Confirm receipt of application.
-- 'Interview Invitation': Invite candidate to technical or cultural fit interview with slot options.
-- 'Assessment Invitation': Request candidate to complete coding or domain assessment.
-- 'Additional Information Request': Request missing certificates, portfolio, or references.
-- 'Reference Check Request': Ask candidate's approval and details for reference calls.
-- 'Offer Letter Draft': Formal job offer draft with salary and start date details.
-- 'Rejection Email': Empathetic, polite rejection keeping talent in candidate pool for future roles.
-
-Return JSON with format:
+Return JSON strictly matching this schema:
 {
-  "subject": "Email Subject Line",
-  "body": "Full body text of the email with appropriate greetings and sign-off"
+  "aboutRole": "A compelling 2-3 paragraph overview of the role, team purpose, and growth potential.",
+  "responsibilities": [
+    "Key responsibility 1",
+    "Key responsibility 2",
+    "Key responsibility 3",
+    "Key responsibility 4",
+    "Key responsibility 5",
+    "Key responsibility 6"
+  ],
+  "essentialRequirements": [
+    "Demonstrated experience in...",
+    "Strong proficiency in..."
+  ],
+  "preferredRequirements": [
+    "Familiarity with...",
+    "Exposure to..."
+  ],
+  "experienceDescription": "Clear summary of experience expectation",
+  "jobDescription": "Full formatted comprehensive job description text combining about role, responsibilities, and requirements."
 }`;
 
     const response = await ai.models.generateContent({
@@ -434,14 +484,67 @@ Return JSON with format:
     });
 
     const parsed = JSON.parse(response.text || '{}');
-    return res.json({ success: true, email: parsed });
+    return res.json({ success: true, data: parsed });
   } catch (error: any) {
-    console.error('Error in /api/gemini/generate-email:', error);
-    return res.status(500).json({ error: 'Failed to generate email', details: error.message });
+    console.error('Error in handleGenerateJobDescription:', error);
+    return res.status(500).json({ error: 'Failed to generate job description', details: error.message });
   }
-});
+}
 
-// Step 1 AI Job Profile Generator Endpoint
+app.post('/api/ai/generate-job-description', handleGenerateJobDescription);
+app.post('/api/gemini/generate-job-description', handleGenerateJobDescription);
+
+// ============================================================================
+// 4. AI JOB SUGGESTIONS / INTELLIGENCE ENDPOINT
+// ============================================================================
+async function handleJobSuggestions(req: express.Request, res: express.Response) {
+  try {
+    const { jobTitle, department } = req.body;
+    if (!jobTitle) {
+      return res.status(400).json({ error: 'Job title is required.' });
+    }
+
+    const ai = getGeminiClient();
+
+    const prompt = `Provide recruitment intelligence and recommendations for the role of "${jobTitle}" in the "${department || 'General'}" department.
+Return JSON strictly matching:
+{
+  "suggestedSkills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5", "Skill 6"],
+  "preferredSkills": ["Pref Skill 1", "Pref Skill 2", "Pref Skill 3"],
+  "suggestedQualifications": ["BSc in Computer Science / Information Systems", "National Diploma (NQF 6/7)"],
+  "suggestedCertifications": ["Certification 1", "Certification 2"],
+  "suggestedExperienceYears": 3,
+  "suggestedResponsibilities": [
+    "Primary responsibility 1",
+    "Primary responsibility 2",
+    "Primary responsibility 3",
+    "Primary responsibility 4"
+  ],
+  "suggestedBenefits": ["Medical Aid Contribution", "Performance Bonus", "Flexible Work / Remote Option", "Retirement Fund"]
+} `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const parsed = JSON.parse(response.text || '{}');
+    return res.json({ success: true, data: parsed });
+  } catch (error: any) {
+    console.error('Error in handleJobSuggestions:', error);
+    return res.status(500).json({ error: 'Failed to fetch job suggestions', details: error.message });
+  }
+}
+
+app.post('/api/ai/job-suggestions', handleJobSuggestions);
+app.post('/api/gemini/job-suggestions', handleJobSuggestions);
+
+// ============================================================================
+// 5. AI RAW JOB TEXT PARSER ENDPOINT
+// ============================================================================
 app.post('/api/gemini/analyze-job', async (req, res) => {
   try {
     const { rawJobText } = req.body;
@@ -526,7 +629,46 @@ Return JSON strictly matching this schema:
   }
 });
 
-// n8n Webhook Proxy Endpoint
+// ============================================================================
+// 6. AI EMAIL GENERATOR ENDPOINT
+// ============================================================================
+app.post('/api/gemini/generate-email', async (req, res) => {
+  try {
+    const { candidateName, jobTitle, companyName, emailType, customNotes } = req.body;
+    const ai = getGeminiClient();
+
+    const prompt = `Write a highly professional, friendly, and personalized email for a recruitment process.
+Candidate Name: ${candidateName}
+Job Title: ${jobTitle}
+Company: ${companyName || 'Aura Tech Enterprise'}
+Email Type: ${emailType}
+Additional Recruiter Context: ${customNotes || 'Standard recruitment template'}
+
+Return JSON with format:
+{
+  "subject": "Email Subject Line",
+  "body": "Full body text of the email with appropriate greetings and sign-off"
+}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const parsed = JSON.parse(response.text || '{}');
+    return res.json({ success: true, email: parsed });
+  } catch (error: any) {
+    console.error('Error in /api/gemini/generate-email:', error);
+    return res.status(500).json({ error: 'Failed to generate email', details: error.message });
+  }
+});
+
+// ============================================================================
+// 7. OPTIONAL EXTERNAL N8N WEBHOOK PROXY (FOR AUTOMATION/NOTIFICATIONS)
+// ============================================================================
 app.post('/api/n8n/trigger-webhook', async (req, res) => {
   try {
     let { webhookUrl, payload, customHeaders } = req.body;
@@ -550,7 +692,6 @@ app.post('/api/n8n/trigger-webhook', async (req, res) => {
       body: JSON.stringify(payload || {}),
     });
 
-    // Smart fallback if test URL returns 404 (workflow inactive in test mode, try production URL)
     let actualUrlUsed = webhookUrl;
     if (!response.ok && response.status === 404 && webhookUrl.includes('/webhook-test/')) {
       const prodUrl = webhookUrl.replace('/webhook-test/', '/webhook/');
@@ -588,7 +729,7 @@ app.post('/api/n8n/trigger-webhook', async (req, res) => {
       responseData = responseText;
     }
 
-    console.log(`[n8n Proxy] Webhook responded with status ${response.status} in ${durationMs}ms (URL: ${actualUrlUsed})`);
+    console.log(`[n8n Proxy] Webhook responded with status ${response.status} in ${durationMs}ms`);
 
     return res.json({
       success: response.ok,
@@ -625,8 +766,9 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`TalentFlow AI Recruitment Platform running on http://0.0.0.0:${PORT}`);
+    console.log(`Aura Recruitment Flow AI running on http://0.0.0.0:${PORT}`);
   });
 }
 
 startServer();
+
