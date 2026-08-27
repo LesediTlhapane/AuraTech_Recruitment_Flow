@@ -1,7 +1,55 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ApplicationRecord, EmailCommunication } from '../types';
 import { generateEmailWithAi } from '../services/api';
 import { Mail, Sparkles, Send, Copy, CheckCircle, FileText, RefreshCw, UserCheck } from 'lucide-react';
+
+const getCandidateName = (candidate?: ApplicationRecord) =>
+  candidate?.extractedData
+    ? `${candidate.extractedData.name} ${candidate.extractedData.surname}`.trim()
+    : 'Candidate';
+
+const buildEmailDraft = (
+  emailType: EmailCommunication['type'],
+  candidate?: ApplicationRecord
+) => {
+  const candidateName = getCandidateName(candidate);
+  const jobTitle = candidate?.jobTitle || 'the position';
+  const greeting = `Dear ${candidateName},`;
+  const closing = '\n\nKind regards,\nTalent Acquisition Team';
+
+  const drafts: Record<EmailCommunication['type'], { subject: string; body: string }> = {
+    Acknowledgement: {
+      subject: `Application Received: ${jobTitle}`,
+      body: `${greeting}\n\nThank you for applying for the ${jobTitle} position. We confirm that we have received your application and our recruitment team will review your profile.\n\nWe will contact you with an update once the next stage of the process has been determined.${closing}`,
+    },
+    'Interview Invitation': {
+      subject: `Interview Invitation: ${jobTitle}`,
+      body: `${greeting}\n\nWe were impressed by your application for the ${jobTitle} position and would like to invite you to an interview.\n\nPlease confirm your availability, and we will share the meeting details and agenda.${closing}`,
+    },
+    'Assessment Invitation': {
+      subject: `Assessment Invitation: ${jobTitle}`,
+      body: `${greeting}\n\nAs the next step in our selection process for the ${jobTitle} position, please complete the assessment shared with this email.\n\nPlease submit your completed assessment by the agreed deadline. Contact us if you need any clarification.${closing}`,
+    },
+    'Additional Information Request': {
+      subject: `Additional Information Required: ${jobTitle}`,
+      body: `${greeting}\n\nThank you for your application for the ${jobTitle} position. To continue our review, please provide the additional information or documents requested below.\n\nRequested information:\n- [Add details here]${closing}`,
+    },
+    'Reference Check Request': {
+      subject: `Reference Check Request: ${jobTitle}`,
+      body: `${greeting}\n\nWe are progressing your application for the ${jobTitle} position and would like to complete a reference check.\n\nPlease confirm the names, roles, and contact details of your nominated referees, and confirm that we have permission to contact them.${closing}`,
+    },
+    'Offer Letter Draft': {
+      subject: `Offer Letter: ${jobTitle}`,
+      body: `${greeting}\n\nWe are pleased to let you know that we would like to make you an offer for the ${jobTitle} position.\n\nThe formal offer will include the agreed compensation, start date, employment conditions, and any applicable requirements. Please review the attached details and let us know if you have any questions.${closing}`,
+    },
+    'Rejection Email': {
+      subject: `Application Update: ${jobTitle}`,
+      body: `${greeting}\n\nThank you for the time and effort you invested in applying for the ${jobTitle} position. After careful consideration, we have decided not to progress your application on this occasion.\n\nWe appreciate your interest and wish you every success in your future career.${closing}`,
+    },
+  };
+
+  return drafts[emailType];
+};
 
 interface CommunicationsProps {
   candidates: ApplicationRecord[];
@@ -23,12 +71,19 @@ export const Communications: React.FC<CommunicationsProps> = ({
   const [emailType, setEmailType] = useState<EmailCommunication['type']>('Interview Invitation');
   const [customNotes, setCustomNotes] = useState('Suggest interview slots for Tuesday 10:00 AM or Wednesday 02:00 PM SAST.');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [subject, setSubject] = useState('Interview Invitation: Senior Full Stack Engineer');
-  const [body, setBody] = useState(`Dear Candidate,\n\nWe are pleased to invite you for a technical interview...\n\nBest regards,\nTalent Acquisition Team`);
+
+  const selectedCandidate = candidates.find((c) => c.id === selectedCandidateId) || candidates[0];
+  const initialDraft = buildEmailDraft('Interview Invitation', selectedCandidate);
+  const [subject, setSubject] = useState(initialDraft.subject);
+  const [body, setBody] = useState(initialDraft.body);
   const [copied, setCopied] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
 
-  const selectedCandidate = candidates.find((c) => c.id === selectedCandidateId) || candidates[0];
+  useEffect(() => {
+    const draft = buildEmailDraft(emailType, selectedCandidate);
+    setSubject(draft.subject);
+    setBody(draft.body);
+  }, [emailType, selectedCandidate?.id]);
 
   const handleGenerateAiEmail = async () => {
     if (!selectedCandidate) return;
@@ -36,9 +91,7 @@ export const Communications: React.FC<CommunicationsProps> = ({
     setSentSuccess(false);
 
     try {
-      const candidateName = selectedCandidate.extractedData
-        ? `${selectedCandidate.extractedData.name} ${selectedCandidate.extractedData.surname}`
-        : 'Candidate';
+      const candidateName = getCandidateName(selectedCandidate);
 
       const generated = await generateEmailWithAi(
         candidateName,
@@ -60,9 +113,7 @@ export const Communications: React.FC<CommunicationsProps> = ({
   const handleSendEmail = () => {
     if (!selectedCandidate) return;
 
-    const candidateName = selectedCandidate.extractedData
-      ? `${selectedCandidate.extractedData.name} ${selectedCandidate.extractedData.surname}`
-      : 'Candidate';
+    const candidateName = getCandidateName(selectedCandidate);
 
     const newEmail: EmailCommunication = {
       id: `email-${Date.now()}`,

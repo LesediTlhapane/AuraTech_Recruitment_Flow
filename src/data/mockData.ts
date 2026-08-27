@@ -1,3 +1,4 @@
+
 import { JobProfile, ApplicationRecord, EmailCommunication, InterviewSlot, AuditLogItem, NotificationItem } from '../types';
 
 export const initialJobs: JobProfile[] = [

@@ -99,6 +99,24 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
     onUpdateStatus(candidate.id, newStatus, recruiterNote);
   };
 
+  const handleScheduleInterview = () => {
+    handleStatusChange('Interview Scheduled');
+    onClose();
+    onNavigateToInterview?.(candidate);
+  };
+
+  const handleDecision = (status: ApplicationStatus) => {
+    handleStatusChange(status);
+
+    if (status === 'Assessment Sent' || status === 'Offer Extended') {
+      onClose();
+      onNavigateToEmail?.(candidate);
+      return;
+    }
+
+    onClose();
+  };
+
   const handleConfirmDelete = async () => {
     if (!onDeleteCandidate) return;
     setIsDeleting(true);
@@ -748,37 +766,37 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
 
             <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => handleStatusChange('Shortlisted')}
+                onClick={() => handleDecision('Shortlisted')}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs active:scale-95"
               >
                 Mark Shortlisted
               </button>
               <button
-                onClick={() => handleStatusChange('Interview Scheduled')}
+                onClick={handleScheduleInterview}
                 className="bg-amber-600 hover:bg-amber-700 text-white font-semibold px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs active:scale-95"
               >
                 Schedule Interview
               </button>
               <button
-                onClick={() => handleStatusChange('Assessment Sent')}
+                onClick={() => handleDecision('Assessment Sent')}
                 className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs active:scale-95"
               >
                 Send Assessment
               </button>
               <button
-                onClick={() => handleStatusChange('Offer Extended')}
+                onClick={() => handleDecision('Offer Extended')}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs active:scale-95"
               >
                 Extend Offer
               </button>
               <button
-                onClick={() => handleStatusChange('On Hold')}
+                onClick={() => handleDecision('On Hold')}
                 className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-semibold px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs active:scale-95"
               >
                 Put on Hold
               </button>
               <button
-                onClick={() => handleStatusChange('Rejected')}
+                onClick={() => handleDecision('Rejected')}
                 className="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-semibold px-3.5 py-1.5 rounded-xl text-xs transition shadow-xs active:scale-95"
               >
                 Reject Candidate

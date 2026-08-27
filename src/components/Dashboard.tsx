@@ -118,6 +118,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
 
     return true;
+  }).sort((candidateA, candidateB) => {
+    const scoreDifference = candidateB.scores.overallScore - candidateA.scores.overallScore;
+    if (scoreDifference !== 0) return scoreDifference;
+
+    const nameA = `${candidateA.extractedData?.name || ''} ${candidateA.extractedData?.surname || ''}`.trim();
+    const nameB = `${candidateB.extractedData?.name || ''} ${candidateB.extractedData?.surname || ''}`.trim();
+    return nameA.localeCompare(nameB);
   });
 
   // Dynamic Recruiter Actions
@@ -207,10 +214,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         {/* Card 1 */}
         <div 
-          onClick={() => setSelectedStageFilter(selectedStageFilter === 'Received' ? 'ALL' : 'Received')}
-          className={`bg-white/90 backdrop-blur-md border rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer ${
-            selectedStageFilter === 'Received' ? 'border-blue-500 ring-2 ring-blue-500/30 bg-blue-50/20' : 'border-white/80'
-          }`}
+          onClick={() => onNavigateTab('candidates')}
+          className="bg-white/90 backdrop-blur-md border border-white/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-semibold">Received</span>
@@ -224,10 +229,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Card 2 */}
         <div 
-          onClick={() => setSelectedStageFilter(selectedStageFilter === 'Screened' ? 'ALL' : 'Screened')}
-          className={`bg-white/90 backdrop-blur-md border rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer ${
-            selectedStageFilter === 'Screened' ? 'border-indigo-500 ring-2 ring-indigo-500/30 bg-indigo-50/20' : 'border-white/80'
-          }`}
+          onClick={() => onNavigateTab('workbench')}
+          className="bg-white/90 backdrop-blur-md border border-white/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-semibold">Screened</span>
@@ -241,10 +244,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Card 3 */}
         <div 
-          onClick={() => setSelectedStageFilter(selectedStageFilter === 'Shortlisted' ? 'ALL' : 'Shortlisted')}
-          className={`bg-white/90 backdrop-blur-md border rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer ${
-            selectedStageFilter === 'Shortlisted' ? 'border-emerald-500 ring-2 ring-emerald-500/30 bg-emerald-50/20' : 'border-white/80'
-          }`}
+          onClick={() => onNavigateTab('candidates')}
+          className="bg-white/90 backdrop-blur-md border border-white/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-semibold">Top Match</span>
@@ -258,10 +259,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Card 4 */}
         <div 
-          onClick={() => setSelectedStageFilter(selectedStageFilter === 'Interview' ? 'ALL' : 'Interview')}
-          className={`bg-white/90 backdrop-blur-md border rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer ${
-            selectedStageFilter === 'Interview' ? 'border-amber-500 ring-2 ring-amber-500/30 bg-amber-50/20' : 'border-white/80'
-          }`}
+          onClick={() => onNavigateTab('scheduling')}
+          className="bg-white/90 backdrop-blur-md border border-white/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-semibold">Interviews</span>
@@ -275,10 +274,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Card 5 */}
         <div 
-          onClick={() => setSelectedStageFilter(selectedStageFilter === 'Offers' ? 'ALL' : 'Offers')}
-          className={`bg-white/90 backdrop-blur-md border rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer ${
-            selectedStageFilter === 'Offers' ? 'border-green-500 ring-2 ring-green-500/30 bg-green-50/20' : 'border-white/80'
-          }`}
+          onClick={() => onNavigateTab('communications')}
+          className="bg-white/90 backdrop-blur-md border border-white/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-semibold">Offers</span>
@@ -291,7 +288,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Card 6 */}
-        <div className="bg-white/90 backdrop-blur-md border border-white/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200">
+        <div onClick={() => onNavigateTab('candidates')} className="bg-white/90 backdrop-blur-md border border-white/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-semibold">Rejected</span>
             <XCircle className="w-4 h-4 text-rose-600" />
@@ -303,7 +300,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Card 7 */}
-        <div className="bg-white/90 backdrop-blur-md border border-white/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200">
+        <div onClick={() => onNavigateTab('analytics')} className="bg-white/90 backdrop-blur-md border border-white/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-semibold">Avg Score</span>
             <TrendingUp className="w-4 h-4 text-purple-600" />
@@ -315,7 +312,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Card 8 */}
-        <div className="bg-white/90 backdrop-blur-md border border-white/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200">
+        <div onClick={() => onNavigateTab('analytics')} className="bg-white/90 backdrop-blur-md border border-white/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-semibold">Time Saved</span>
             <Clock className="w-4 h-4 text-cyan-600" />

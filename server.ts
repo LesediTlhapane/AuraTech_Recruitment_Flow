@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import 'dotenv/config';
 import { GoogleGenAI } from '@google/genai';
 import mammoth from 'mammoth';
 import * as pdfParseNamespace from 'pdf-parse';

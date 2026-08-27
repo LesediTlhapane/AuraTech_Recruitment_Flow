@@ -4,15 +4,7 @@ import {
   CheckCircle2, 
   Trash2, 
   Search, 
-  Sparkles, 
   X, 
-  SlidersHorizontal,
-  BrainCircuit,
-  ShieldCheck,
-  FileText,
-  Calendar,
-  Zap,
-  Mail
 } from 'lucide-react';
 import { NotificationItem } from '../types';
 
@@ -22,7 +14,6 @@ interface NotificationsPageProps {
   onMarkAllAsRead: () => void;
   onRemoveNotification: (id: string) => void;
   onClearAll: () => void;
-  onSimulateNotification: (presetCategory?: string) => void;
   onNavigateTab?: (tab: string) => void;
 }
 
@@ -32,7 +23,6 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
   onMarkAllAsRead,
   onRemoveNotification,
   onClearAll,
-  onSimulateNotification,
   onNavigateTab
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,7 +31,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const categories = ['All', 'Ingestion', 'Screening', 'Parsing', 'Compliance', 'Matching', 'Calendar', 'Communication'];
+  const categories = ['All', 'Ingestion', 'Screening', 'Parsing', 'Compliance', 'Matching', 'Calendar', 'Communication', 'System'];
 
   const filteredNotifications = notifications.filter((item) => {
     // Search query filter
@@ -119,47 +109,6 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
           </div>
         </div>
 
-        {/* Live Simulation Trigger Toolbar */}
-        <div className="mt-6 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center space-x-2 text-slate-300 font-medium">
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <span>Test Live Notification Triggers:</span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => onSimulateNotification('Ingestion')}
-              className="bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 active:scale-95"
-            >
-              <FileText className="w-3.5 h-3.5 text-cyan-400" />
-              <span>+ Ingest CV</span>
-            </button>
-
-            <button
-              onClick={() => onSimulateNotification('Screening')}
-              className="bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 hover:border-indigo-500/50 px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 active:scale-95"
-            >
-              <BrainCircuit className="w-3.5 h-3.5 text-indigo-400" />
-              <span>+ AI Screen</span>
-            </button>
-
-            <button
-              onClick={() => onSimulateNotification('Compliance')}
-              className="bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 hover:border-emerald-500/50 px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 active:scale-95"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>+ POPIA Audit</span>
-            </button>
-
-            <button
-              onClick={() => onSimulateNotification('Calendar')}
-              className="bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 hover:border-purple-500/50 px-3 py-1.5 rounded-xl transition flex items-center space-x-1.5 active:scale-95"
-            >
-              <Calendar className="w-3.5 h-3.5 text-purple-400" />
-              <span>+ Interview</span>
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Search & Filter Controls */}
@@ -238,15 +187,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
               </p>
             </div>
             <div className="pt-2 flex justify-center gap-3">
-              {notifications.length === 0 ? (
-                <button
-                  onClick={() => onSimulateNotification()}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition shadow-md flex items-center space-x-2"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>Generate Test Notification</span>
-                </button>
-              ) : (
+              {notifications.length > 0 && (
                 <button
                   onClick={() => {
                     setSearchQuery('');

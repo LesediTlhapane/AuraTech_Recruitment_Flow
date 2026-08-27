@@ -18,7 +18,6 @@ import { normalizeMonthlySalary } from './utils/vacancyUtils';
 
 import {
   initialEmails,
-  initialNotifications,
 } from './data/mockData';
 
 import {
@@ -90,6 +89,12 @@ const toDatabaseCandidateStatus = (
     case 'interview scheduled':
     case 'interview-scheduled':
       return 'interview';
+    case 'assessment sent':
+      return 'screening';
+    case 'offer extended':
+      return 'hired';
+    case 'on hold':
+      return 'archived';
     case 'rejected':
     case 'reject':
     case 'not suitable':
@@ -176,7 +181,7 @@ export function App() {
     useState<AuditLogItem[]>([]);
 
   const [notifications, setNotifications] =
-    useState<NotificationItem[]>(initialNotifications);
+    useState<NotificationItem[]>([]);
 
   const [activeToastNotif, setActiveToastNotif] =
     useState<NotificationItem | null>(null);
@@ -307,6 +312,13 @@ export function App() {
         if (auditLogsResult.error) {
           throw new Error(
             `Audit Logs: ${auditLogsResult.error.message}`
+          );
+        }
+
+        if (notificationsResult.error) {
+          console.warn(
+            'Notifications are unavailable. Apply supabase_notifications_policies.sql in Supabase SQL Editor:',
+            notificationsResult.error.message
           );
         }
 
@@ -707,7 +719,7 @@ export function App() {
         // MAP NOTIFICATIONS
         // ========================================================
 
-        if (notificationsResult.data && notificationsResult.data.length > 0) {
+        if (notificationsResult.data) {
           const mappedNotifications: NotificationItem[] = notificationsResult.data.map((n: any) => ({
             id: String(n.id),
             icon: n.icon || (n.type === 'interview' ? '📅' : n.type === 'screening' ? '🧠' : n.type === 'compliance' ? '🛡️' : '📄'),
@@ -716,7 +728,7 @@ export function App() {
             badge: n.badge || (n.type ? n.type.charAt(0).toUpperCase() + n.type.slice(1) : 'Alert'),
             timestamp: n.created_at ? new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent',
             read: Boolean(n.is_read || n.read),
-            category: (n.category || (n.type === 'interview' ? 'Calendar' : n.type === 'screening' ? 'Screening' : n.type === 'compliance' ? 'Compliance' : 'Ingestion')) as any,
+            category: (n.category || (n.type === 'interview' ? 'Calendar' : n.type === 'screening' ? 'Screening' : n.type === 'compliance' ? 'Compliance' : n.type === 'communication' ? 'Communication' : n.type === 'vacancy' || n.type === 'candidate_status' ? 'System' : 'Ingestion')) as any,
           }));
           setNotifications(mappedNotifications);
         }
@@ -797,6 +809,50 @@ export function App() {
   // NOTIFICATIONS
   // ============================================================
 
+  const addNotification = async (notification: Omit<NotificationItem, 'id' | 'timestamp' | 'read'> & { type: string }) => {
+    const notificationId = isSupabaseConfigured
+      ? crypto.randomUUID()
+      : `notif-${Date.now()}`;
+    const newNotification: NotificationItem = {
+      id: notificationId,
+      icon: notification.icon,
+      title: notification.title,
+      detail: notification.detail,
+      badge: notification.badge,
+      timestamp: 'Just now',
+      read: false,
+      category: notification.category,
+    };
+
+    setNotifications((prev) => [newNotification, ...prev]);
+    setActiveToastNotif(newNotification);
+
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const { error } = await supabase.from('notifications').insert({
+        id: notificationId,
+        title: notification.title,
+        message: notification.detail,
+        type: notification.type,
+        is_read: false,
+      });
+
+      if (error) {
+        setNotifications((prev) => prev.filter((item) => item.id !== notificationId));
+        setActiveToastNotif(null);
+        console.warn(
+          'Supabase notification insert failed. Apply supabase_notifications_policies.sql in Supabase SQL Editor:',
+          error.message
+        );
+      }
+    } catch (error) {
+      setNotifications((prev) => prev.filter((item) => item.id !== notificationId));
+      setActiveToastNotif(null);
+      console.warn('Supabase notification insert warning:', error);
+    }
+  };
+
   const handleMarkNotifAsRead = (
     id: string
   ) => {
@@ -858,133 +914,37 @@ export function App() {
     ) {
       setActiveToastNotif(null);
     }
+
+    if (isSupabaseConfigured && isUuid(id)) {
+      supabase
+        .from('notifications')
+        .delete()
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) {
+            console.warn('Supabase notification delete:', error.message);
+          }
+        });
+    }
   };
 
   const handleClearAllNotifications =
     () => {
       setNotifications([]);
       setActiveToastNotif(null);
-    };
 
-  const handleSimulateNotification = async (
-    presetCategory?: string
-  ) => {
-    const presets = [
-      {
-        icon: '📄',
-        title:
-          'New CV Application Ingested',
-        detail:
-          'Candidate Thabo Mokoena applied for Lead Data Engineer via Careers Portal.',
-        badge: 'Ingestion',
-        category: 'Ingestion' as const,
-        type: 'ingestion',
-      },
-      {
-        icon: '🧠',
-        title:
-          'AI Screening Score Generated',
-        detail:
-          'Aura AI calculated 96% match score for Thabo Mokoena (High Suitability).',
-        badge: 'Screening',
-        category: 'Screening' as const,
-        type: 'screening',
-      },
-      {
-        icon: '🛡️',
-        title:
-          'POPIA Compliance Certificate Issued',
-        detail:
-          'Digital consent signature & data retention logging verified for candidate.',
-        badge: 'Compliance',
-        category: 'Compliance' as const,
-        type: 'compliance',
-      },
-      {
-        icon: '📅',
-        title:
-          'Interview Slot Synchronized',
-        detail:
-          'Calendar invite sent to Hiring Panel for tomorrow at 10:00 AM.',
-        badge: 'Calendar',
-        category: 'Calendar' as const,
-        type: 'interview',
-      },
-      {
-        icon: '🤝',
-        title:
-          'Automated Candidate Match',
-        detail:
-          'Candidate matched to Senior Full Stack Engineer vacancy.',
-        badge: 'Matching',
-        category: 'Matching' as const,
-        type: 'matching',
-      },
-    ];
-
-    let chosen =
-      presets[
-        Math.floor(
-          Math.random() * presets.length
-        )
-      ];
-
-    if (presetCategory) {
-      const match = presets.find(
-        (p) =>
-          p.category.toLowerCase() ===
-          presetCategory.toLowerCase()
-      );
-
-      if (match) {
-        chosen = match;
-      }
-    }
-
-    const tempId = `notif-${Date.now()}`;
-    const newNotif: NotificationItem = {
-      id: tempId,
-      icon: chosen.icon,
-      title: chosen.title,
-      detail: chosen.detail,
-      badge: chosen.badge,
-      timestamp: 'Just now',
-      read: false,
-      category: chosen.category,
-    };
-
-    setNotifications((prev) => [
-      newNotif,
-      ...prev,
-    ]);
-
-    setActiveToastNotif(newNotif);
-
-    if (isSupabaseConfigured) {
-      try {
-        const { data, error } = await supabase
+      if (isSupabaseConfigured) {
+        supabase
           .from('notifications')
-          .insert({
-            title: chosen.title,
-            message: chosen.detail,
-            type: chosen.type,
-            is_read: false,
-          })
-          .select()
-          .single();
-
-        if (!error && data?.id) {
-          setNotifications((prev) =>
-            prev.map((item) =>
-              item.id === tempId ? { ...item, id: String(data.id) } : item
-            )
-          );
-        }
-      } catch (err) {
-        console.warn('Supabase notification insert warning:', err);
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000')
+          .then(({ error }) => {
+            if (error) {
+              console.warn('Supabase clear notifications:', error.message);
+            }
+          });
       }
-    }
-  };
+    };
 
   // ============================================================
   // AUDIT LOG
@@ -1044,6 +1004,14 @@ export function App() {
     );
 
     if (!isSupabaseConfigured) {
+      await addNotification({
+        icon: '💼',
+        title: 'Vacancy Created',
+        detail: `${newJob.jobTitle} was added to the recruitment pipeline.`,
+        badge: 'Vacancy',
+        category: 'System',
+        type: 'vacancy',
+      });
       console.log(
         'Supabase not configured. Job stored in local application state only.'
       );
@@ -1094,6 +1062,14 @@ export function App() {
             prev.map((j) => (j.id === newJob.id ? { ...j, id: supabaseId } : j))
           );
         }
+        await addNotification({
+          icon: '💼',
+          title: 'Vacancy Created',
+          detail: `${newJob.jobTitle} was added to the recruitment pipeline.`,
+          badge: 'Vacancy',
+          category: 'System',
+          type: 'vacancy',
+        });
       }
     } catch (error) {
       console.error('Supabase job save error:', error);
@@ -1331,6 +1307,22 @@ export function App() {
     );
 
     if (!isSupabaseConfigured) {
+      await addNotification({
+        icon: '📄',
+        title: 'CV Application Ingested',
+        detail: `${candidateName} was added for ${newCand.jobTitle}.`,
+        badge: 'Ingestion',
+        category: 'Ingestion',
+        type: 'ingestion',
+      });
+      await addNotification({
+        icon: '🧠',
+        title: 'AI Screening Completed',
+        detail: `${candidateName} received a ${Number(newCand.scores?.overallScore ?? 0)}% suitability score for ${newCand.jobTitle}.`,
+        badge: 'Screening',
+        category: 'Screening',
+        type: 'screening',
+      });
       console.log(
         'Supabase not configured. Candidate stored in local application state only.'
       );
@@ -1400,6 +1392,15 @@ export function App() {
             : candidate
         )
       );
+
+      await addNotification({
+        icon: '📄',
+        title: 'CV Application Ingested',
+        detail: `${candidateName} was added for ${newCand.jobTitle}.`,
+        badge: 'Ingestion',
+        category: 'Ingestion',
+        type: 'ingestion',
+      });
 
       // ============================================================
       // SAVE SCREENING USING public.screenings SCHEMA
@@ -1510,6 +1511,14 @@ export function App() {
           'Successfully saved candidate screening to Supabase for ID:',
           candidateUuid
         );
+        await addNotification({
+          icon: '🧠',
+          title: 'AI Screening Completed',
+          detail: `${candidateName} received a ${overallScore}% suitability score for ${newCand.jobTitle}.`,
+          badge: 'Screening',
+          category: 'Screening',
+          type: 'screening',
+        });
       }
 
       addAuditLog(
@@ -1584,6 +1593,17 @@ export function App() {
           : null
       );
     }
+
+    const candidateNotification = {
+      icon: newStatus === 'Rejected' ? '⛔' : newStatus === 'On Hold' ? '⏸️' : newStatus === 'Offer Extended' ? '🎉' : newStatus === 'Interview Scheduled' ? '📅' : '✅',
+      title: `Candidate ${newStatus}`,
+      detail: `${candidateName}'s recruitment status was updated to ${newStatus}.`,
+      badge: 'Candidate Status',
+      category: 'System' as const,
+      type: 'candidate_status',
+    };
+
+    void addNotification(candidateNotification);
 
     if (!isSupabaseConfigured) return;
 
@@ -1789,6 +1809,15 @@ export function App() {
       newEmail.candidateId,
       'COMMUNICATION'
     );
+
+    void addNotification({
+      icon: '✉️',
+      title: 'Candidate Communication Sent',
+      detail: `Sent ${newEmail.type} email to ${newEmail.candidateName}.`,
+      badge: 'Communication',
+      category: 'Communication',
+      type: 'communication',
+    });
   };
 
   // ============================================================
@@ -1813,6 +1842,14 @@ export function App() {
     );
 
     if (!isSupabaseConfigured) {
+      await addNotification({
+        icon: '📅',
+        title: 'Interview Scheduled',
+        detail: `Interview scheduled for ${newSlot.candidateName} on ${newSlot.date} at ${newSlot.startTime}.`,
+        badge: 'Calendar',
+        category: 'Calendar',
+        type: 'interview',
+      });
       console.log(
         'Supabase not configured. Interview stored in local application state only.'
       );
@@ -1855,6 +1892,14 @@ export function App() {
         );
       } else {
         console.log('Successfully saved interview to Supabase for candidate:', newSlot.candidateId);
+        await addNotification({
+          icon: '📅',
+          title: 'Interview Scheduled',
+          detail: `Interview scheduled for ${newSlot.candidateName} on ${newSlot.date} at ${newSlot.startTime}.`,
+          badge: 'Calendar',
+          category: 'Calendar',
+          type: 'interview',
+        });
       }
     } catch (error) {
       console.error('Supabase interview save error:', error);
@@ -2254,9 +2299,6 @@ export function App() {
             }
             onClearAll={
               handleClearAllNotifications
-            }
-            onSimulateNotification={
-              handleSimulateNotification
             }
             onNavigateTab={(tab) =>
               setActiveTab(tab)
