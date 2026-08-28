@@ -259,7 +259,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Card 4 */}
         <div 
-          onClick={() => onNavigateTab('scheduling')}
+          onClick={() => onNavigateTab('interviews')}
           className="bg-white/90 backdrop-blur-md border border-white/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_8px_25px_rgba(15,23,42,0.04)] hover:shadow-[0_16px_35px_rgba(15,23,42,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-pointer"
         >
           <div className="flex items-center justify-between">
@@ -601,7 +601,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   if (cand.status === 'Shortlisted' || (cand.status === 'Screened' && cand.scores.overallScore >= 80)) {
                     actionText = 'Shortlisted top candidate ready for interview scheduling.';
                     actionBtnText = 'Schedule Interview →';
-                    targetTab = 'scheduling';
+                    targetTab = 'interviews';
                   } else if (cand.risks && cand.risks.length > 0) {
                     actionText = `Flagged: ${cand.risks[0].description}`;
                     actionBtnText = 'Review Risk Analysis →';

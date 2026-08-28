@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ApplicationRecord, EmailCommunication } from '../types';
+import { ApplicationRecord, EmailCommunication, InterviewSlot } from '../types';
 import { generateEmailWithAi } from '../services/api';
-import { Mail, Sparkles, Send, Copy, CheckCircle, FileText, RefreshCw, UserCheck } from 'lucide-react';
+import { Mail, Sparkles, Send, Copy, CheckCircle, FileText, RefreshCw, UserCheck, Paperclip, X } from 'lucide-react';
 
 const getCandidateName = (candidate?: ApplicationRecord) =>
   candidate?.extractedData
@@ -10,12 +10,16 @@ const getCandidateName = (candidate?: ApplicationRecord) =>
 
 const buildEmailDraft = (
   emailType: EmailCommunication['type'],
-  candidate?: ApplicationRecord
+  candidate?: ApplicationRecord,
+  interview?: InterviewSlot
 ) => {
   const candidateName = getCandidateName(candidate);
   const jobTitle = candidate?.jobTitle || 'the position';
   const greeting = `Dear ${candidateName},`;
   const closing = '\n\nKind regards,\nTalent Acquisition Team';
+  const interviewDetails = interview
+    ? `\n\nInterview details:\nDate: ${new Date(`${interview.date}T00:00:00`).toLocaleDateString('en-ZA', { day: '2-digit', month: 'long', year: 'numeric' })}\nTime: ${interview.startTime} - ${interview.endTime}\nInterviewer: ${interview.interviewerName}\nMeeting link: ${interview.meetingLink}`
+    : '\n\nInterview details:\nDate and time: To be confirmed';
 
   const drafts: Record<EmailCommunication['type'], { subject: string; body: string }> = {
     Acknowledgement: {
@@ -24,7 +28,7 @@ const buildEmailDraft = (
     },
     'Interview Invitation': {
       subject: `Interview Invitation: ${jobTitle}`,
-      body: `${greeting}\n\nWe were impressed by your application for the ${jobTitle} position and would like to invite you to an interview.\n\nPlease confirm your availability, and we will share the meeting details and agenda.${closing}`,
+      body: `${greeting}\n\nWe were impressed by your application for the ${jobTitle} position and would like to invite you to an interview.${interviewDetails}\n\nPlease confirm your availability and let us know if you have any questions.${closing}`,
     },
     'Assessment Invitation': {
       subject: `Assessment Invitation: ${jobTitle}`,
@@ -54,36 +58,48 @@ const buildEmailDraft = (
 interface CommunicationsProps {
   candidates: ApplicationRecord[];
   emails: EmailCommunication[];
+  interviews: InterviewSlot[];
   onAddEmail: (email: EmailCommunication) => void;
   preselectedCandidate?: ApplicationRecord | null;
+  initialEmailType?: EmailCommunication['type'];
 }
 
 export const Communications: React.FC<CommunicationsProps> = ({
   candidates,
   emails,
+  interviews,
   onAddEmail,
   preselectedCandidate,
+  initialEmailType,
 }) => {
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>(
     preselectedCandidate?.id || candidates[0]?.id || ''
   );
 
-  const [emailType, setEmailType] = useState<EmailCommunication['type']>('Interview Invitation');
+  const [emailType, setEmailType] = useState<EmailCommunication['type']>(initialEmailType || 'Interview Invitation');
   const [customNotes, setCustomNotes] = useState('Suggest interview slots for Tuesday 10:00 AM or Wednesday 02:00 PM SAST.');
   const [isGenerating, setIsGenerating] = useState(false);
 
   const selectedCandidate = candidates.find((c) => c.id === selectedCandidateId) || candidates[0];
-  const initialDraft = buildEmailDraft('Interview Invitation', selectedCandidate);
+  const selectedInterview = interviews.find((interview) => interview.candidateId === selectedCandidate?.id);
+  const initialDraft = buildEmailDraft('Interview Invitation', selectedCandidate, selectedInterview);
   const [subject, setSubject] = useState(initialDraft.subject);
   const [body, setBody] = useState(initialDraft.body);
+  const [assessmentFile, setAssessmentFile] = useState<File | null>(null);
   const [copied, setCopied] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
 
   useEffect(() => {
-    const draft = buildEmailDraft(emailType, selectedCandidate);
+    if (initialEmailType) {
+      setEmailType(initialEmailType);
+    }
+  }, [initialEmailType]);
+
+  useEffect(() => {
+    const draft = buildEmailDraft(emailType, selectedCandidate, selectedInterview);
     setSubject(draft.subject);
     setBody(draft.body);
-  }, [emailType, selectedCandidate?.id]);
+  }, [emailType, selectedCandidate?.id, selectedInterview?.id, selectedInterview?.date, selectedInterview?.startTime]);
 
   const handleGenerateAiEmail = async () => {
     if (!selectedCandidate) return;
@@ -102,7 +118,10 @@ export const Communications: React.FC<CommunicationsProps> = ({
       );
 
       setSubject(generated.subject);
-      setBody(generated.body);
+      const generatedBody = emailType === 'Interview Invitation'
+        ? `${generated.body}${selectedInterview ? `\n\nInterview details:\nDate: ${new Date(`${selectedInterview.date}T00:00:00`).toLocaleDateString('en-ZA', { day: '2-digit', month: 'long', year: 'numeric' })}\nTime: ${selectedInterview.startTime} - ${selectedInterview.endTime}\nInterviewer: ${selectedInterview.interviewerName}\nMeeting link: ${selectedInterview.meetingLink}` : '\n\nInterview details:\nDate and time: To be confirmed'}`
+        : generated.body;
+      setBody(generatedBody);
     } catch (e) {
       console.error(e);
     } finally {
@@ -110,10 +129,26 @@ export const Communications: React.FC<CommunicationsProps> = ({
     }
   };
 
-  const handleSendEmail = () => {
+  const handleSendEmail = async () => {
     if (!selectedCandidate) return;
 
     const candidateName = getCandidateName(selectedCandidate);
+
+    let attachment: EmailCommunication['attachment'];
+    if (emailType === 'Assessment Invitation' && assessmentFile) {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(assessmentFile);
+      });
+      attachment = {
+        name: assessmentFile.name,
+        type: assessmentFile.type || 'application/octet-stream',
+        size: assessmentFile.size,
+        dataUrl,
+      };
+    }
 
     const newEmail: EmailCommunication = {
       id: `email-${Date.now()}`,
@@ -123,6 +158,7 @@ export const Communications: React.FC<CommunicationsProps> = ({
       type: emailType,
       subject,
       body,
+      attachment,
       sentDate: new Date().toISOString(),
       status: 'Sent',
     };
@@ -199,6 +235,30 @@ export const Communications: React.FC<CommunicationsProps> = ({
               className="w-full bg-slate-50/80 border border-slate-200 rounded-xl p-2.5 text-slate-900 focus:outline-none focus:bg-white focus:border-cyan-500 shadow-xs"
             />
           </div>
+
+          {emailType === 'Assessment Invitation' && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 space-y-2">
+              <label htmlFor="assessment-attachment" className="flex items-center gap-2 text-xs font-bold text-indigo-900">
+                <Paperclip className="w-3.5 h-3.5 text-indigo-600" /> Attach Assessment
+              </label>
+              <input
+                id="assessment-attachment"
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.zip"
+                onChange={(event) => setAssessmentFile(event.target.files?.[0] || null)}
+                className="block w-full text-[11px] text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-2.5 file:py-1.5 file:text-[11px] file:font-semibold file:text-white hover:file:bg-indigo-700"
+              />
+              {assessmentFile && (
+                <div className="flex items-center justify-between gap-2 rounded-lg bg-white px-2.5 py-2 text-[11px] text-slate-700 border border-indigo-100">
+                  <span className="truncate font-semibold">{assessmentFile.name}</span>
+                  <button type="button" onClick={() => setAssessmentFile(null)} title="Remove assessment attachment" className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+              <p className="text-[10px] text-indigo-700">The selected file will be included with this candidate communication record.</p>
+            </div>
+          )}
 
           <button
             onClick={handleGenerateAiEmail}
@@ -304,7 +364,7 @@ export const Communications: React.FC<CommunicationsProps> = ({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-slate-800 font-medium">{e.subject}</td>
-                  <td className="px-4 py-3 text-slate-500">{e.sentDate || 'Just now'}</td>
+                  <td className="px-4 py-3 text-slate-500">{e.sentDate || 'Just now'}{e.attachment && <span className="ml-2 inline-flex items-center gap-1 text-indigo-600" title={e.attachment.name}><Paperclip className="w-3 h-3" /> Attached</span>}</td>
                   <td className="px-4 py-3">
                     <span className="bg-emerald-50 text-emerald-800 text-[10px] px-2.5 py-0.5 rounded-full font-bold border border-emerald-200">
                       {e.status}

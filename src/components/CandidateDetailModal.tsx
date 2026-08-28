@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ApplicationRecord, ApplicationStatus, JobProfile } from '../types';
+import { ApplicationRecord, ApplicationStatus, EmailCommunication, JobProfile } from '../types';
 import { 
   X, 
   BrainCircuit, 
@@ -38,7 +38,7 @@ interface CandidateDetailModalProps {
   onDeleteCandidate?: (candidateId: string) => Promise<void> | void;
   onToggleMuteCandidate?: (candidateId: string) => Promise<void> | void;
   isAnonymizedView?: boolean;
-  onNavigateToEmail?: (candidate: ApplicationRecord) => void;
+  onNavigateToEmail?: (candidate: ApplicationRecord, emailType?: EmailCommunication['type']) => void;
   onNavigateToInterview?: (candidate: ApplicationRecord) => void;
 }
 
@@ -110,7 +110,10 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
 
     if (status === 'Assessment Sent' || status === 'Offer Extended') {
       onClose();
-      onNavigateToEmail?.(candidate);
+      onNavigateToEmail?.(
+        candidate,
+        status === 'Assessment Sent' ? 'Assessment Invitation' : 'Offer Letter Draft'
+      );
       return;
     }
 

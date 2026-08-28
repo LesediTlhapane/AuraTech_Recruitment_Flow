@@ -217,6 +217,12 @@ export interface EmailCommunication {
   type: 'Acknowledgement' | 'Interview Invitation' | 'Assessment Invitation' | 'Additional Information Request' | 'Reference Check Request' | 'Offer Letter Draft' | 'Rejection Email';
   subject: string;
   body: string;
+  attachment?: {
+    name: string;
+    type: string;
+    size: number;
+    dataUrl?: string;
+  };
   sentDate?: string;
   status: 'Draft' | 'Sent' | 'Scheduled';
 }

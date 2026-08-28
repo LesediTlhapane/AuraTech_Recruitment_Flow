@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ApplicationRecord, InterviewSlot } from '../types';
 import { Calendar, Clock, Video, UserCheck, Plus, Download, CheckCircle, RefreshCw } from 'lucide-react';
 
@@ -20,7 +20,14 @@ export const InterviewScheduler: React.FC<InterviewSchedulerProps> = ({
   const [date, setDate] = useState('2026-08-14');
   const [startTime, setStartTime] = useState('11:00');
   const [durationMinutes, setDurationMinutes] = useState(45);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(Boolean(preselectedCandidate));
+
+  useEffect(() => {
+    if (preselectedCandidate) {
+      setCandidateId(preselectedCandidate.id);
+      setIsModalOpen(true);
+    }
+  }, [preselectedCandidate?.id]);
 
   const selectedCandidate = candidates.find((c) => c.id === candidateId) || candidates[0];
 

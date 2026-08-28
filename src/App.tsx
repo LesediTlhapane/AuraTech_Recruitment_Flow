@@ -805,6 +805,11 @@ export function App() {
     setPreselectedCommCandidate,
   ] = useState<ApplicationRecord | null>(null);
 
+  const [
+    preselectedEmailType,
+    setPreselectedEmailType,
+  ] = useState<EmailCommunication['type'] | undefined>(undefined);
+
   // ============================================================
   // NOTIFICATIONS
   // ============================================================
@@ -1911,9 +1916,11 @@ export function App() {
   // ============================================================
 
   const handleNavigateToEmail = (
-    cand: ApplicationRecord
+    cand: ApplicationRecord,
+    emailType?: EmailCommunication['type']
   ) => {
     setPreselectedCommCandidate(cand);
+    setPreselectedEmailType(emailType);
     setActiveTab('communications');
   };
 
@@ -1921,7 +1928,7 @@ export function App() {
     cand: ApplicationRecord
   ) => {
     setPreselectedCommCandidate(cand);
-    setActiveTab('scheduling');
+    setActiveTab('interviews');
   };
 
   // ============================================================
@@ -2232,18 +2239,22 @@ export function App() {
           <Communications
             candidates={candidates}
             emails={emails}
+            interviews={interviews}
             onAddEmail={
               handleAddEmail
             }
             preselectedCandidate={
               preselectedCommCandidate
             }
+            initialEmailType={
+              preselectedEmailType
+            }
           />
         )}
 
         {/* SCHEDULING */}
 
-        {activeTab === 'scheduling' && (
+        {activeTab === 'interviews' && (
           <InterviewScheduler
             candidates={candidates}
             interviews={interviews}
